@@ -1,0 +1,138 @@
+.container {
+	position: relative;
+	padding: 8px;
+	height: 100%;
+	width: calc(100% - 16px);
+	background-color: #303030;
+	border-bottom: 1px solid black;
+}
+
+.packArea {
+	display: flex;
+	align-items: center;
+	border: 1px solid var(--background-color-very-bright);
+	background-color: var(--background-color-darker);
+	padding: 10px;
+	margin-bottom: 8px;
+}
+
+.modTableArea {
+	background-color: var(--background-color-darker);
+	padding: 10px;
+}
+
+.openedPack {
+	border: 1px solid var(--foreground-color);
+	background-color: var(--background-color-brighter);
+	min-width: 5px;
+	flex: 1;
+	height: 24px;
+	position: relative;
+	margin-left: 8px;
+	margin-right: 8px;
+	padding-left: 8px;
+	padding-top: 8px;
+}
+
+.container h2 {
+	font-size: 5rem;
+}
+
+.container a {
+	font-size: 1.4rem;
+}
+
+.autosuggest {
+	width: 300px;
+}
+
+.suggestBox {
+	background-color: var(--background-color-brighter);
+	border: 1px solid var(--foreground-color);
+	padding: 3px;
+	color: var(--foreground-color);
+	box-sizing: border-box;
+	width: 200px;
+}
+
+.suggestionEntry {
+	background-color: var(--background-color-brighter);
+	display: flex;
+	align-items: center;
+	padding-bottom: 4px;
+	cursor: pointer;
+}
+
+.suggestionCaption {
+	cursor: pointer;
+}
+
+.suggestionEntry:hover {
+	color: rgb(169,255,0);
+}
+
+.suggestionImage {
+	width: 32px;
+	height: 32px;
+	margin-right: 8px;
+}
+
+.searchContainer {
+	position: relative;
+}
+
+.suggestWrap {
+	flex: 1;
+	width: 100%;
+}
+
+.suggestionContainer {
+	position: absolute;
+	width: 100%;
+	padding: 0px;
+	margin: 0px;
+	background-color: var(--background-color-brighter);
+	padding-top: 0px;
+	z-index: 1;
+}
+
+.suggestButtonWrap {
+	display: flex;
+	align-items: stretch;
+	flex-direction: row;
+	width: 100%;
+}
+
+.modTable {
+	border: 1px solid var(--background-color-very-bright);
+}
+
+.tableRegion {
+	padding-top: 8px;
+}
+
+.packOptionsArea {
+	display: flex;
+	align-items: center;
+	border: 1px solid var(--background-color-very-bright);
+	background-color: var(--background-color-darker);
+	padding: 10px;
+	margin-bottom: 8px;
+}
+
+.modAddRegion {
+	min-width: 250px;
+}
+
+.modpackButtons {
+	display: flex;
+	align-items: center;
+	background-color: var(--background-color-brighter);
+	width: 100%;
+	margin-left: 8px;
+	padding: 8px;
+}
+
+.modToolbar {
+	display: flex;
+}
