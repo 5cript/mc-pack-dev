@@ -68,7 +68,7 @@
 }
 
 .suggestionEntry:hover {
-	color: rgb(169,255,0);
+	color: rgb(255,169,0) !important;
 }
 
 .suggestionImage {

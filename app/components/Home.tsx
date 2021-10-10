@@ -16,15 +16,30 @@ import StyledButton, {SlimButton} from './button';
 import FormControl from '@material-ui/core/FormControl';
 import Select from '@material-ui/core/Select';
 import ForgeScrape from '../minecraft/forge';
-const { spawn } = require('child_process');
+import FabricScrape from '../minecraft/fabric';
 import { styled, ThemeProvider, createMuiTheme, withStyles } from '@material-ui/core/styles';
 import LauncherProfiles from '../minecraft/launcher_profiles';
 
+// node packages
+import electron from 'electron';
+import curseforge from 'mc-curseforge-api';
+import pathTools from 'path';
+import {default as fs} from 'fs';
+import {default as archiver} from 'archiver';
+import {default as fsExtra} from 'fs-extra';
+import {spawn} from 'child_process';
+import { REPL_MODE_SLOPPY } from 'repl';
+
+const fsPromise = fs.promises;
+/*
 const electron = window.require('electron');
 const curseforge = window.require("mc-curseforge-api");
 const pathTools = window.require('path');
 const fs = window.require('fs');
 const fsPromise = window.require('fs').promises;
+const fsExtra = window.require('fs-extra');
+const { spawn } = require('child_process');
+*/
 
 const StyledLabel = styled(InputLabel)({
 	color: 'var(--foreground-color)',
@@ -73,7 +88,8 @@ type HomeState = {
 	modSearchValue: string,
 	pack: {
 		mods: Array<Mod>,
-		minecraftVersion: string
+		minecraftVersion: string,
+		fabric: boolean
 	},
 	packInfo: {
 		directory: string,
@@ -105,7 +121,8 @@ class Home extends React.Component<HomeProps>
 		modSearchValue: '',
 		pack: {
 			mods: [],
-			minecraftVersion: ''
+			minecraftVersion: '',
+			fabric: false
 		},
 		packInfo: {
 			directory: '',
@@ -119,6 +136,7 @@ class Home extends React.Component<HomeProps>
 		installTotal: 0
 	};
 	messageBoxActions: MessageBoxActions = {yes: ()=>{}, no: ()=>{}, ok: ()=>{}};
+	throttledFetch: Function;
 
 	constructor(props : HomeProps)
 	{
@@ -134,6 +152,10 @@ class Home extends React.Component<HomeProps>
 			else
 				this.state.mcVersions = mcVersions;
 		})()
+
+		this.throttledFetch = _.debounce((value) => {
+			return this.onModSearchFetchRequest(value);
+		}, 150);
 	}
 
 	simplifyVersion = (version: string) => 
@@ -147,11 +169,17 @@ class Home extends React.Component<HomeProps>
 		return split.join('.');
 	}
 
-	loadModFromRemote = (id: number, mcVersions: Array<string>) =>
+	loadModFromRemote = (id: number, mcVersions: Array<string>, fabric: boolean) =>
 	{
+		console.log(mcVersions);
 		return Promise.all([curseforge.getMod(id), curseforge.getModFiles(id).then((modFiles: any) => {
 			modFiles = modFiles.filter((file: any) => {
-				return file.minecraft_versions.find((version : string) => {
+				const isFabric = file.minecraft_versions.find((version : string) => {
+					if (version.toLowerCase() === "fabric")
+						return true;
+					return false;
+				}) !== undefined;
+				const correctVersion = file.minecraft_versions.find((version : string) => {
 					for (let v in mcVersions)
 					{
 						if (!mcVersions[v].includes('.'))
@@ -168,6 +196,8 @@ class Home extends React.Component<HomeProps>
 					}
 					return false;
 				}) !== undefined;
+
+				return correctVersion && (isFabric === fabric);
 			})
 			modFiles.sort((lhs: {timestamp: string}, rhs: {timestamp: string}) => {
 				return moment(rhs.timestamp).isAfter(lhs.timestamp) ? 1 : -1;
@@ -176,17 +206,17 @@ class Home extends React.Component<HomeProps>
 		})]);
 	}
 
-	updateModList = async (mods: Array<Mod>) =>
+	updateModList = async (mods: Array<Mod>, fabric: boolean) =>
 	{
 		const promises = mods.map((mod : Mod) => {
-			return this.loadModFromRemote(mod.id, mod.minecraftVersions).then(([_1, modFiles]) => {
+			return this.loadModFromRemote(mod.id, mod.minecraftVersions.filter(elem => elem.toLowerCase() !== "fabric"), fabric).then(([_1, modFiles]) => {
+				modFiles = _.cloneDeep(modFiles);
 				if (modFiles.length === 0) {
 					mod.newestTimestamp = '?';
 					return;
 				}
 				mod.newestTimestamp = modFiles[0].timestamp;
 				mod.latestFile = modFiles[0];
-				console.log(mod.newestTimestamp)
 				return mod;
 			});
 		});
@@ -198,17 +228,28 @@ class Home extends React.Component<HomeProps>
 		let packInfo = _.clone(this.state.packInfo);
 		packInfo.directory = dir;
 		packInfo.metaDir = pathTools.join(dir, 'mcpackdev');
-		// TODO: load mod file.
-
 		let pack = _.clone(this.state.pack);
-		try
-		{
-			pack = JSON.parse(fs.readFileSync(pathTools.join(packInfo.metaDir, 'modpack.json')));
-			pack.mods = await this.updateModList(pack.mods);
+
+		if (!fs.existsSync(packInfo.metaDir))
+			fs.mkdirSync(packInfo.metaDir);
+
+		if (fs.existsSync(pathTools.join(packInfo.metaDir, 'modpack.json')))
+		{	
+			try
+			{
+				const packParsed = JSON.parse(fs.readFileSync(pathTools.join(packInfo.metaDir, 'modpack.json')));
+				pack = packParsed;
+				pack.mods = await this.updateModList(packParsed.mods, packParsed.fabric);
+				console.log(pack.mods);
+			}
+			catch(e)
+			{
+				console.error(e);
+			}
 		}
-		catch(e)
+		else
 		{
-			console.error(e);
+			pack.mods = [];
 		}
 
 		if (this.mounted)
@@ -220,6 +261,15 @@ class Home extends React.Component<HomeProps>
 			this.state.packInfo = packInfo;
 			this.savePersistence();
 		}
+
+		if (
+			this.state.pack.minecraftVersion === "" || 
+			this.state.pack.minecraftVersion === undefined ||
+			this.state.pack.minecraftVersion === null)
+		{
+			this.showMessageBox('Select minecraft version please', 'Ok');
+			return;
+		}
 	}
 
 	savePack = () =>
@@ -230,7 +280,7 @@ class Home extends React.Component<HomeProps>
 		if (!fs.existsSync(this.state.packInfo.metaDir))
 			fs.mkdirSync(this.state.packInfo.metaDir);
 
-		let pack = _.clone(this.state.pack);
+		let pack = _.cloneDeep(this.state.pack);
 		pack.mods = pack.mods.map(mod => {
 			delete mod.newestTimestamp;
 			delete mod.latestFile;
@@ -260,6 +310,7 @@ class Home extends React.Component<HomeProps>
 		{
 			console.log(e);
 		}
+
 	}
 
 	savePersistence = () => 
@@ -278,22 +329,58 @@ class Home extends React.Component<HomeProps>
 
 	showMessageBox = (message : string, type : string, actions: MessageBoxActions = {}) => 
 	{
+		console.log(actions);
 		this.messageBoxActions = actions;
-		this.setState({
-			messageBoxStyle: type,
-			messageBoxText: message,
-			messageBoxVisible: true
-		})
+		if (this.mounted)
+			this.setState({
+				messageBoxStyle: type,
+				messageBoxText: message,
+				messageBoxVisible: true
+			})
+		else {
+			this.state.messageBoxStyle =  type;
+			this.state.messageBoxText = message;
+			this.state.messageBoxVisible = true;
+		}
+	}
+	
+	initializePack = () =>
+	{
+		if (this.initializeCommon() !== true)
+			return;
+
+		if (this.state.pack.fabric)
+			this.initializeFabric();
+		else
+			this.initializeForge();
 	}
 
-	initializePack = () =>
+	initializeCommon = () => 
 	{
 		const packDir = this.state.packInfo.directory;
 		if (!fs.existsSync(packDir))
-			return this.showMessageBox('folder does not exist', 'Ok', {});
+		{
+			this.showMessageBox('folder does not exist', 'Ok', {});
+			return false;
+		}
 
-		if (!fs.existsSync(pathTools.join(packDir, "minecraft")))
-			fs.mkdirSync(pathTools.join(packDir, "minecraft"));
+		if (
+			this.state.pack.minecraftVersion === "" || 
+			this.state.pack.minecraftVersion === undefined ||
+			this.state.pack.minecraftVersion === null)
+		{
+			this.showMessageBox('Select minecraft version please', 'Ok');
+			return false;
+		}
+		return true;
+	}
+
+	initializeForge = () =>
+	{
+		const packDir = this.state.packInfo.directory;
+
+		if (!fs.existsSync(pathTools.join(packDir, "client")))
+			fs.mkdirSync(pathTools.join(packDir, "client"));
 
 		let forgeVersion = '';
 		let forgeInstaller = '';
@@ -303,7 +390,7 @@ class Home extends React.Component<HomeProps>
 			() => {
 				return fetch("https://launcher.mojang.com/download/Minecraft.exe").then(response => {
 					return response.arrayBuffer().then(buffer => {
-						fs.writeFileSync(pathTools.join(packDir, "minecraft", "Minecraft.exe"), Buffer.from(buffer));
+						fs.writeFileSync(pathTools.join(packDir, "client", "Minecraft.exe"), Buffer.from(buffer));
 					})
 				}).catch(err => {
 					return this.showMessageBox(err.message, 'Ok', {});
@@ -311,13 +398,13 @@ class Home extends React.Component<HomeProps>
 			},
 			// Create run.bat
 			() => {
-				return fsPromise.writeFile(pathTools.join(packDir, "run.bat"), "set WORKDIR=%cd%\\minecraft\nstart \"\" \"minecraft/Minecraft.exe\" --workDir \"%WORKDIR%\"")
+				return fsPromise.writeFile(pathTools.join(packDir, "run.bat"), "set WORKDIR=%cd%\\client\nstart \"\" \"client/Minecraft.exe\" --workDir \"%WORKDIR%\"")
 			},
 			// Create launch_profiles.json
 			() => 
 			{
 				let profiles = new LauncherProfiles();
-				return fsPromise.writeFile(pathTools.join(packDir, "minecraft", "launcher_profiles.json"), JSON.stringify(profiles.getObject(), null, 4));
+				return fsPromise.writeFile(pathTools.join(packDir, "client", "launcher_profiles.json"), JSON.stringify(profiles.getObject(), null, 4));
 			},
 			// Get Forge version and install
 			() => {
@@ -325,7 +412,7 @@ class Home extends React.Component<HomeProps>
 				return (async () => {
 					forgeVersion = await scraper.loadCurrentForgeVersion(this.state.pack.minecraftVersion);
 					return scraper.downloadForge().then(buffer => {
-						forgeInstaller = pathTools.join(packDir, "minecraft", "forge-" + forgeVersion + "-installer.jar");
+						forgeInstaller = pathTools.join(packDir, "client", "forge-" + forgeVersion + "-installer.jar");
 						return fsPromise.writeFile(forgeInstaller, Buffer.from(buffer));
 					});
 				})();
@@ -355,9 +442,9 @@ class Home extends React.Component<HomeProps>
 			// Modify launcher_profiles
 			() => {
 				let profiles = new LauncherProfiles();
-				profiles.loadProfiles(pathTools.join(packDir, "minecraft", "launcher_profiles.json"));
+				profiles.loadProfiles(pathTools.join(packDir, "client", "launcher_profiles.json"));
 				profiles.modifyForgeProfile(pathTools.basename(this.state.packInfo.directory));
-				return fsPromise.writeFile(pathTools.join(packDir, "minecraft", "launcher_profiles.json"), JSON.stringify(profiles.getObject(), null, 4));
+				return fsPromise.writeFile(pathTools.join(packDir, "client", "launcher_profiles.json"), JSON.stringify(profiles.getObject(), null, 4));
 			}
 		];
 		this.showMessageBox('Please Wait', 'Modal', {});
@@ -371,7 +458,99 @@ class Home extends React.Component<HomeProps>
 		})()
 	}
 
+	initializeFabric = () => {
+		const packDir = this.state.packInfo.directory;
+		
+		if (!fs.existsSync(pathTools.join(packDir, "client")))
+			fs.mkdirSync(pathTools.join(packDir, "client"));
+			
+		if (!fs.existsSync(pathTools.join(packDir, "server")))
+			fs.mkdirSync(pathTools.join(packDir, "server"));
 
+		const makeInstaller = (whatFor: string) => {
+			return new Promise((res, rej) => {
+				if (!fs.existsSync(pathTools.join(packDir, whatFor, "mods")))
+					fs.mkdirSync(pathTools.join(packDir, whatFor, "mods"));
+
+				const fabricInstaller = pathTools.join(packDir, "fabric-installer.jar");
+				const args = ['-jar', fabricInstaller, whatFor, "-mcversion", this.state.pack.minecraftVersion, "-dir", pathTools.join(packDir, whatFor)];
+				if (whatFor === "server")
+				{
+					args.push('-downloadMinecraft');
+				}
+				const process = spawn('java', args);
+				process.on('close', (code: number) => {
+					res(code);
+				})
+				process.on('error', (err: any) => {
+					console.error(err);
+					rej(err);
+				})
+				process.stdout.on('data', (data: string) => {
+					console.log(`forge-installer: ${data}`);
+				});
+				process.stderr.on('data', (data: string) => {
+					console.error(`forge-installer: ${data}`);
+				});
+			});
+		}
+
+		let jobs = [
+			// Download Minecraft.exe
+			() => {
+				return fetch("https://launcher.mojang.com/download/Minecraft.exe").then(response => {
+					return response.arrayBuffer().then(buffer => {
+						fs.writeFileSync(pathTools.join(packDir, "client", "Minecraft.exe"), Buffer.from(buffer));
+					})
+				}).catch(err => {
+					return this.showMessageBox(err.message, 'Ok', {});
+				})
+			},
+			// Get Fabric version and download latest
+			() => {
+				let scraper = new FabricScrape();
+				return (async () => {
+					return scraper.downloadFabricInstaller().then(buffer => {
+						const fabricInstaller = pathTools.join(packDir, "fabric-installer.jar");
+						return fsPromise.writeFile(fabricInstaller, Buffer.from(buffer));
+					});
+				})();
+			},
+			// Create launcher profiles
+			async () => {
+				let profiles = new LauncherProfiles();
+				return fsPromise.writeFile(pathTools.join(packDir, "client", "launcher_profiles.json"), JSON.stringify(profiles.makeDefault(), null, 4));
+			},
+			// Install fabric client
+			() => {
+				return makeInstaller("client");
+			},
+			// Install server
+			() => {
+				return makeInstaller("server");
+			},
+			// Create run.bat
+			() => {
+				return fsPromise.writeFile(pathTools.join(packDir, "run.bat"), "set WORKDIR=%cd%\\client\nstart \"\" \"client/Minecraft.exe\" --workDir \"%WORKDIR%\"")
+			},
+			// Modify launcher_profiles
+			() => {
+				let profiles = new LauncherProfiles();
+				profiles.loadProfiles(pathTools.join(packDir, "client", "launcher_profiles.json"));
+				profiles.modifyFabricProfile(pathTools.basename(this.state.packInfo.directory), this.state.pack.minecraftVersion);
+				return fsPromise.writeFile(pathTools.join(packDir, "client", "launcher_profiles.json"), JSON.stringify(profiles.getObject(), null, 4));
+			}
+		]
+		this.showMessageBox('Please Wait', 'Modal', {});
+		(async () => {
+			// must be sequential
+			for (let job of jobs)
+				await job();
+			this.setState({
+				messageBoxVisible: false
+			})
+		})()
+	}
 
 	addModToPack = async (modFromApi: any) => {
 		if (this.state.pack.mods.find(mod => mod.id === modFromApi.id) !== undefined)
@@ -388,19 +567,20 @@ class Home extends React.Component<HomeProps>
 			if (ctx)
 			{
 				var img = new Image;
-				img.src = modFromApi.logo.thumbnailUrl;
+				if (modFromApi.logo)
+					img.src = modFromApi.logo.thumbnailUrl;
 				ctx.drawImage(img, 0, 0, this.converterCanvas.width, this.converterCanvas.height);
 			}
 			imageData = this.converterCanvas.toDataURL();
 		}
 
-		const [_1, modFiles] = await  this.loadModFromRemote(modFromApi.id, [this.state.pack.minecraftVersion]);
-		console.log(modFiles);
+		let [_1, modFiles] = await this.loadModFromRemote(modFromApi.id, [this.state.pack.minecraftVersion], this.state.pack.fabric);
+		modFiles = _.cloneDeep(modFiles);
 		if (modFiles.length === 0) {
 			this.showMessageBox('No file found for given Minecraft version.', 'Ok');
 			return;
 		}
-		const mod : Mod = {
+		const restructured : Mod = {
 			name: modFromApi.name,
 			id: modFromApi.id,
 			sid: modFromApi.key,
@@ -409,9 +589,9 @@ class Home extends React.Component<HomeProps>
 			installedTimestamp: '',
 			newestTimestamp: modFiles[0].timestamp,
 			logoPng64: imageData,
-			latestFile: modFiles[0]
+			latestFile: _.cloneDeep(modFiles[0])
 		};
-		pack.mods.push(mod);
+		pack.mods.push(restructured);
 		this.setState({pack: pack}, () => {
 			this.savePack();
 		});
@@ -419,7 +599,7 @@ class Home extends React.Component<HomeProps>
 
 	onModSearchFetchRequest = ({value} : {value: string}) => 
 	{
-		curseforge.getMods({ 
+		return curseforge.getMods({ 
 			gameVersion: this.state.pack.minecraftVersion,
 			searchFilter: value,
 			pageSize: 10,
@@ -443,8 +623,18 @@ class Home extends React.Component<HomeProps>
 
 	renderModSuggestion = (mod: any) => (
 		<div className={styles.suggestionEntry}>
-			<img className={styles.suggestionImage} src={mod.logo.thumbnailUrl}></img>
-			<div className={styles.suggestionCaption}>{mod.name}</div>
+			<img className={styles.suggestionImage} src={mod.logo ? mod.logo.thumbnailUrl : ''}></img>
+			<div className={styles.suggestionCaption} style={{
+				color: (() => {
+					//if (this.state.modSearchValue !== "")
+					//	return 'rgb(169,255,0)';
+					if (this.state.pack.mods.findIndex(m => {
+						return m.id === mod.id;
+					}) !== -1)
+						return 'rgb(230,120,120)';
+					return undefined;
+				})()
+			}}>{mod.name}</div>
 		</div>
 	)
 
@@ -466,19 +656,42 @@ class Home extends React.Component<HomeProps>
 
 	getModList = () => 
 	{
-		return this.state.pack.mods;
+		console.log(this.state.pack);
+		const res = this.state.pack.mods.sort((lhs: Mod, rhs: Mod) => {
+			return lhs.name.localeCompare(rhs.name);
+		});
+		return res;
+	}
+
+	sortedToReal = (index: number) => 
+	{
+		const sorted = this.getModList();
+		return this.state.pack.mods.findIndex((mod: Mod) => {
+			return (mod.id === sorted[index].id);
+		})
 	}
 
 	deleteModByIndex = (index: number) =>
 	{
+		// find in sorted:
+		index = this.sortedToReal(index);
+
 		let pack = _.clone(this.state.pack);
 		const installed = pack.mods[index].installedName;
 		const isInstalled = installed !== undefined && installed !== null && installed !== "";
 		const remove = () => {
 			if (isInstalled)
 			{
-				const result = pathTools.join(this.state.packInfo.directory, 'minecraft', 'mods', pack.mods[index].installedName);
-				fs.unlinkSync(result);
+				const result = pathTools.join(this.state.packInfo.directory, 'client', 'mods', pack.mods[index].installedName);
+				try
+				{
+					if (fs.existsSync(result))
+						fs.unlinkSync(result);
+				}
+				catch(err: Error)
+				{
+					console.log(err);
+				}
 			}
 			pack.mods.splice(index, 1);
 			this.setState({
@@ -491,7 +704,7 @@ class Home extends React.Component<HomeProps>
 		if (isInstalled)
 		{
 			this.showMessageBox('This will uninstall the mod, continue?', 'YesNo', {
-				Yes: () => {
+				yes: () => {
 					remove();
 				}
 			})
@@ -507,11 +720,11 @@ class Home extends React.Component<HomeProps>
 		this.converterCanvas = canvas;
 	}
 
-	installSingle = async (latestFile: any, fileName: string) => 
+	installSingle = async (downloadUrl: string, fileName: string) => 
 	{
-		const result = pathTools.join(this.state.packInfo.directory, 'minecraft', 'mods', fileName);
+		const result = pathTools.join(this.state.packInfo.directory, 'client', 'mods', fileName);
 		console.log(result);
-		return fetch(latestFile.download_url).then(response => {
+		return fetch(downloadUrl).then(response => {
 			return response.arrayBuffer().then(buffer => {
 				return fsPromise.writeFile(result, Buffer.from(buffer))
 			})
@@ -520,38 +733,70 @@ class Home extends React.Component<HomeProps>
 
 	reinstallMods = () => 
 	{
-		let pack = _.clone(this.state.pack);
+		let pack = _.cloneDeep(this.state.pack);
 		const installJobs = pack.mods.map((mod: Mod, i: number) => {
 			// check not required, install all!
 			//if (moment(value.newestTimestamp).isAfter(value.installedTimestamp))
 
+			console.log(mod.latestFile);
 			const lastSlash = mod.latestFile.download_url.lastIndexOf('/');
 			const fileName = mod.latestFile.download_url.substring(lastSlash + 1, mod.latestFile.download_url.length);
 			pack.mods[i].installedName = fileName;
 			pack.mods[i].installedTimestamp = mod.latestFile.timestamp;
-			return async () => {return this.installSingle(mod.latestFile, fileName)};
+			return async () => {return this.installSingle(mod.latestFile.download_url, fileName)};
 		});
 
-		(async () => {
-			// must be sequential
-			this.setState({
-				installProgress: -1,
-				progressBoxVisible: true
-			}, async () => {
-				for (let job of installJobs)
+		const modsFolder = pathTools.join(this.state.packInfo.directory, 'client', 'mods');
+		try 
+		{
+			const doInstall = () => 
+			{
+				fs.mkdirSync(modsFolder);
+				if (!fs.existsSync(modsFolder))
 				{
-					this.setState({
-						installProgress: this.state.installProgress + 1
-					}, async () => {
-						await job();
-					})
+					this.showMessageBox('Could not create mods folder', 'Ok');
+					return;
 				}
-				this.setState({
-					progressBoxVisible: false
-				})
-				this.savePack();
-			})
-		})()
+
+				(async () => {
+					// must be sequential
+					this.setState({
+						installProgress: -1,
+						progressBoxVisible: true
+					}, async () => {
+						for (let job of installJobs)
+						{
+							this.setState({
+								installProgress: this.state.installProgress + 1
+							}, async () => {
+								await job();
+							})
+						}
+						this.setState({
+							progressBoxVisible: false,
+							pack: pack
+						}, () => {
+							this.savePack();
+							this.showMessageBox('Done',  'Ok');
+						})
+					})
+				})();
+			}
+
+			if (fs.existsSync(modsFolder))
+				fsPromise.rmdir(modsFolder, { recursive: true }).then(() => {
+					doInstall();
+				}).catch((err: any) => {
+					this.showMessageBox(err,  'Ok');
+				});
+			else
+				doInstall();
+		}
+		catch(err: Error)
+		{
+			this.showMessageBox('Could not create mods folder: ' + err.message, 'Ok');
+			return;
+		}
 	}
 
 	getMinecraftVersions = async () => 
@@ -569,20 +814,262 @@ class Home extends React.Component<HomeProps>
 		scraper.loadCurrentForgeVersion(this.state.pack.minecraftVersion);
 	}
 
+	/**
+	 * Only deploy files relevant for an update.
+	 */
+	miniDeploy = () => 
+	{
+		this.showMessageBox('Please wait for copy', 'Modal');
+
+		const updateDestination = pathTools.join(this.state.packInfo.directory, 'updates');
+		if (!fs.existsSync(updateDestination))
+			fs.mkdirSync(updateDestination);
+
+		const currentUpdateDest = pathTools.join(updateDestination, moment().format("D_MMM_YY HH_mm_ss"));
+		if (!fs.existsSync(currentUpdateDest))
+			fs.mkdirSync(currentUpdateDest);
+			
+		const copyOver = (...args: Array<string>) => {this.copyOver(currentUpdateDest, ...args)};
+		const createDirInDest = (...args: Array<string>) => {this.createDirInDest(currentUpdateDest, ...args)};
+
+		createDirInDest("client");
+		copyOver("client", "config");
+		copyOver("client", "mods");
+		copyOver("client", "scripts");
+
+		this.setState({
+			messageBoxVisible: false
+		}, () => {
+			this.showMessageBox('Done',  'Ok');
+		})
+	}
+
 	updateMods = () => 
 	{
+		let pack = _.cloneDeep(this.state.pack);
 
+		// create install and delete jobs:
+		const jobs = pack.mods.map((mod: Mod, i) => {
+			const isOutdated = (mod.installedTimestamp === "" || mod.installedTimestamp === null || moment(mod.newestTimestamp).isAfter(mod.installedTimestamp));
+
+			if (isOutdated)
+			{
+				const lastSlash = mod.latestFile.download_url.lastIndexOf('/');
+				const fileName = mod.latestFile.download_url.substring(lastSlash + 1, mod.latestFile.download_url.length);
+				const oldName = _.clone(pack.mods[i].installedName);
+				pack.mods[i].installedName = fileName;
+				pack.mods[i].installedTimestamp = mod.latestFile.timestamp;
+				return async () => {
+					if (oldName.length > 0)
+						fs.unlinkSync(pathTools.join(this.state.packInfo.directory, "client", "mods", oldName));
+					return this.installSingle(mod.latestFile.download_url, fileName);
+				};
+			}
+
+			// just a noop for up to date mods
+			return async () => {}
+		});
+
+		(async () => {
+			// must be sequential
+			this.setState({
+				installProgress: -1,
+				progressBoxVisible: true
+			}, async () => {
+				for (let job of jobs)
+				{
+					this.setState({
+						installProgress: this.state.installProgress + 1
+					}, async () => {
+						await job();
+					})
+				}
+				this.setState({
+					progressBoxVisible: false,
+					pack: pack
+				}, () => {
+					this.savePack();
+					this.miniDeploy();
+				})
+			})
+		})();
+	}
+
+	copyOver = (dest: string, ...relativeNames: Array<string>) => 
+	{
+		const from = pathTools.join(this.state.packInfo.directory, ...relativeNames);
+		const to = pathTools.join(dest, ...relativeNames);
+
+		if (!fs.existsSync(from))
+		{
+			console.log(from + ' does not exist');
+			return;
+		}
+
+		if (fs.lstatSync(from).isDirectory())
+			fs.mkdirSync(to);
+		fsExtra.copySync(from, to);
+	};
+
+	createDirInDest = (dest: string, ...relativeNames: Array<string>) => 
+	{
+		const arr = [...relativeNames];
+		let path = dest;
+		for (let i = 0; i != arr.length; ++i)
+		{
+			path = pathTools.join(path, arr[i]);
+			if (!fs.existsSync(path))
+				fs.mkdirSync(path);
+		}
 	}
 
 	deployPack = () => 
 	{
+		this.showMessageBox('Please wait for copy', 'Modal');
 
+		const deployDestination = pathTools.join(this.state.packInfo.directory, 'deployments');
+		if (!fs.existsSync(deployDestination))
+			fs.mkdirSync(deployDestination);
+
+		const dateTime = moment().format("D_MMM_YY HH_mm_ss");
+		const currentDeploymentDest = pathTools.join(deployDestination, dateTime);
+		if (!fs.existsSync(currentDeploymentDest))
+			fs.mkdirSync(currentDeploymentDest);
+
+		const copyOver = (...args: Array<string>) => {this.copyOver(currentDeploymentDest, ...args)};
+		const createDirInDest = (...args: Array<string>) => {this.createDirInDest(currentDeploymentDest, ...args)};
+
+		copyOver("run.bat");
+		createDirInDest("client");
+		copyOver("mcpackdev");
+		copyOver("client", "config");
+		copyOver("client", "libraries");
+		copyOver("client", "mods");
+		copyOver("client", "scripts");
+		copyOver("client", "versions");
+		copyOver("client", "shaderpacks");
+		copyOver("client", "resourcepacks");
+		copyOver("client", "Minecraft.exe");
+
+		// copies relevant part of launcher profiles
+		let profs = new LauncherProfiles();
+		profs.loadProfiles(pathTools.join(this.state.packInfo.directory, "client", "launcher_profiles.json"));
+		fs.writeFileSync(
+			pathTools.join(currentDeploymentDest, "client", "launcher_profiles.json"), 
+			JSON.stringify(profs.getObject(), null, 4)
+		);
+
+		// make zip
+		const archiveStream = fs.createWriteStream(pathTools.join(this.state.packInfo.directory, "deployments", dateTime + ".zip"));
+		const archive = archiver('zip', {zlib: {level: 9}});
+
+		archiveStream.on('close', () => {
+			console.log(archive.pointer() + ' total bytes');
+			this.setState({
+				messageBoxVisible: false
+			})
+
+			fs.rmdirSync(currentDeploymentDest, { recursive: true });
+		});
+
+		archive.pipe(archiveStream);
+		archive.directory(currentDeploymentDest, false);
+		archive.finalize();
+	}
+
+	onMessageBoxButton = (btn: string) =>
+	{
+		const action = this.messageBoxActions[btn.toLowerCase()];
+		if (action !== undefined)
+			action();
+		this.messageBoxActions = {};
+	}
+
+	suggestInput = (props: any) => {
+		return <input {...props} onKeyUp={(e: KeyboardEvent) => {
+			if (e.keyCode === 13)
+				this.onAddModClick();
+		}}></input>
+	}
+
+	onAddModClick = () => {
+		this.addModToPack(this.state.lastQuery.find(suggestion => {
+			return suggestion.name === this.state.modSearchValue;
+		}))
+		this.setState({
+			modSearchValue: '',
+			lastQuery: []
+		})
+	}
+
+	onInstallClick = (index) => 
+	{
+		let pack = _.cloneDeep(this.state.pack);
+
+		index = this.sortedToReal(index);
+		const mod = this.state.pack.mods[index];
+		console.log(mod);
+
+		const lastSlash = mod.latestFile.download_url.lastIndexOf('/');
+		const fileName = mod.latestFile.download_url.substring(lastSlash + 1, mod.latestFile.download_url.length);
+		
+		const oldName = _.clone(pack.mods[index].installedName);
+		pack.mods[index].installedName = fileName;
+		pack.mods[index].installedTimestamp = mod.latestFile.timestamp;
+		const toDelete = pathTools.join(this.state.packInfo.directory, "client", "mods", oldName);
+		if (oldName.length > 0 && fs.existsSync(toDelete))
+			fs.unlinkSync(toDelete);
+		this.installSingle(mod.latestFile.download_url, fileName);
+		
+		(async () => {
+			this.setState({
+				pack: pack
+			}, () => {
+				this.savePack();
+				this.miniDeploy();
+			})
+		})();
 	}
 
 	render()
 	{
 		return (
 			<div className={styles.container} data-tid="container">
+
+				<MessageBox
+					visible={this.state.messageBoxVisible}
+					message={this.state.messageBoxText}
+					onButtonPress={(btn: string) => {
+						this.setState({messageBoxVisible: false});
+						this.onMessageBoxButton(btn);
+					}}
+					boxStyle={this.state.messageBoxStyle}
+				>
+				</MessageBox>
+
+				<MessageBox
+					visible={this.state.progressBoxVisible}
+					message={'Downloading...'}
+					onButtonPress={() => {}}
+					boxStyle={'Modal'}
+				>
+					<Line
+						percent={(() => {
+							let progress = this.state.installProgress;
+							let total = this.state.installTotal;
+							if (total <= 0)
+								total = 1;
+
+							if (progress < 0)
+								progress = 0;
+
+							return '' + (100*(progress / total));
+						})()}
+						strokeWidth="4"
+						strokeColor="D3D3D3"
+					></Line>
+				</MessageBox>
+
 				<div className={styles.packArea}>
 					<div>Opened Pack: </div>
 					<div className={styles.openedPack}>{this.state.packInfo.directory}</div>
@@ -621,6 +1108,30 @@ class Home extends React.Component<HomeProps>
 								})}
 							</StyledSelect>
 						</StyledForm>
+						<StyledForm>
+							<StyledLabel id="forge_or_fabric_label">Forge or Fabric</StyledLabel>
+							<StyledSelect
+								id="forge_or_fabric_select"
+								labelId="forge_or_fabric_label"
+								value={this.state.pack.fabric ? "Fabric" : "Forge"}
+								onChange={(event) => {
+									let pack = _.clone(this.state.pack);
+									pack.fabric = event.target?.value === "Fabric";
+									console.log(pack.fabric);
+									this.setState({
+										pack: pack
+									}, () => {
+										this.savePack();
+									});
+								}}
+							>	
+							{["Fabric", "Forge"].map((version, i) => {
+								return (
+									<MenuItem key={i} value={version}>{version}</MenuItem>
+								)
+							})}						
+							</StyledSelect>
+						</StyledForm>
 					</ThemeProvider>
 				</div>
 				<div className={styles.modTableArea}>
@@ -635,11 +1146,12 @@ class Home extends React.Component<HomeProps>
 								<Autosuggest
 									className={styles.autosuggest}
 									suggestions={this.state.modSearchSuggestions}
-									onSuggestionsFetchRequested={this.onModSearchFetchRequest}
+									onSuggestionsFetchRequested={this.throttledFetch}
 									onSuggestionsClearRequested={this.onModSearchClearRequest}
 									getSuggestionValue={this.getModSuggestionValue}
 									renderSuggestion={this.renderModSuggestion}
 									renderSuggestionsContainer={this.renderModSuggestionContainer}
+									renderInputComponent={this.suggestInput}
 									inputProps={{
 										placeholder: 'Enter a mod name',
 										value: this.state.modSearchValue,
@@ -649,13 +1161,7 @@ class Home extends React.Component<HomeProps>
 								/>
 								<button
 									onClick={() => {
-										this.addModToPack(this.state.lastQuery.find(suggestion => {
-											return suggestion.name === this.state.modSearchValue;
-										}))
-										this.setState({
-											modSearchValue: '',
-											lastQuery: []
-										})
+										this.onAddModClick();
 									}}
 								>{'Add'}</button>
 							</div>
@@ -727,6 +1233,13 @@ class Home extends React.Component<HomeProps>
 										if (installed === undefined || installed === "" || installed === null)
 											return "not installed";
 										return installed;
+									},
+									width: 400
+								},
+								{
+									Header: 'Version',
+									accessor: (mod: Mod) => {
+										return JSON.stringify(mod.latestFile.minecraft_versions);
 									}
 								}
 							]}
@@ -734,45 +1247,11 @@ class Home extends React.Component<HomeProps>
 							onDelete={this.deleteModByIndex}
 							addLine={() => {}}
 							data={this.getModList()}
+							onInstallClick={(index) => {this.onInstallClick(index)}}
 						>
 						</ModTable>
 					</div>
 				</div>
-
-				<MessageBox
-					visible={this.state.messageBoxVisible}
-					message={this.state.messageBoxText}
-					onButtonPress={() => {
-						this.messageBoxActions = {};
-						this.setState({messageBoxVisible: false});
-					}}
-					boxStyle={this.state.messageBoxStyle}
-				>
-				</MessageBox>
-
-				<MessageBox
-					visible={this.state.progressBoxVisible}
-					message={'Downloading...'}
-					onButtonPress={() => {}}
-					boxStyle={'Modal'}
-				>
-					<Line
-						percent={(() => {
-							let progress = this.state.installProgress;
-							let total = this.state.installTotal;
-							if (total <= 0)
-								total = 1;
-
-							if (progress < 0)
-								progress = 0;
-
-							return '' + (100*(progress / total));
-						})()}
-						strokeWidth="4"
-						strokeColor="D3D3D3"
-					></Line>
-				</MessageBox>
-
 				<canvas ref={this.setConverterCanvas} style={{display: 'none'}}></canvas>
 			</div>
 		);

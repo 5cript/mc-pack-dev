@@ -15,12 +15,13 @@ import { app, BrowserWindow } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import log from 'electron-log';
 import MenuBuilder from './menu';
+import sevenBin from '7zip-bin'
 
 export default class AppUpdater {
   constructor() {
     log.transports.file.level = 'info';
-    autoUpdater.logger = log;
-    autoUpdater.checkForUpdatesAndNotify();
+    //autoUpdater.logger = log;
+    //autoUpdater.checkForUpdatesAndNotify();
   }
 }
 
@@ -49,10 +50,12 @@ const installExtensions = async () => {
 };
 
 const createWindow = async () => {
+  let isdev = false;
   if (
     process.env.NODE_ENV === 'development' ||
     process.env.DEBUG_PROD === 'true'
   ) {
+    isdev = true;
     await installExtensions();
   }
 
@@ -66,8 +69,8 @@ const createWindow = async () => {
 
   mainWindow = new BrowserWindow({
     show: false,
-    width: 1500,
-    height: 728,
+    width: 1050 + (isdev ? 400 : 0),
+    height: 800,
     icon: getAssetPath('icon.png'),
     webPreferences:
       (process.env.NODE_ENV === 'development' ||

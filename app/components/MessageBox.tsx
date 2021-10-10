@@ -64,6 +64,10 @@ class MessageBox extends React.Component
                 isOpen={this.props.visible}
                 disableResize={this.props.disableResize}
                 disableMove={this.props.disableMove}
+                top={200}
+                left={400}
+                disableVerticalMove={true}
+                disableHorizontalMove={true}
             >
                 <div className={styles.messageBoxHeader}>{this.props.title}</div>
                 {this.props.children}

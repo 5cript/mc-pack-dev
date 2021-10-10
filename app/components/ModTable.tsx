@@ -60,7 +60,8 @@ const TableCell = ({
     row: { index },
     column: { id },
     updateMyData, // This is a custom function that we supplied to our table instance
-    removeData
+    removeData,
+    onInstallClick
 }) => {
     // We need to keep and update the state of the cell normally
     const [value, setValue] = React.useState(initialValue)
@@ -104,7 +105,10 @@ const TableCell = ({
     }
    
     if (id === 'deleter')
-        return <div className={styles.removeButton} onClick={onDelete}>{"\u274C"}</div>    
+        return <div>
+            <div className={styles.removeButton} onClick={onDelete}>{"\u274C"}</div>
+            <div className={styles.updateButton} onClick={() => onInstallClick(index)}>{"\u21D1"}</div>
+        </div>
     else if (id === 'icon')
     {
         return <img src={value} alt="Red dot"/>
@@ -115,14 +119,15 @@ const TableCell = ({
 
         if (value === undefined)
             return <div className={styles.cell}>?</div>
-        return <div className={classNames(timeClass, styles.cell)}>
+        // onClick={() => {onInstallClick(index)}}
+        return <div className={classNames(timeClass, styles.cell)} onClick={() => {onInstallClick(index)}} style={{cursor: "pointer"}}>
             {moment(value.installed).format("D. MMM YYYY - HH:mm:ss")}
         </div>
     }
     else if (id === 'newest_time')
     {
         //console.log(value);
-        if (value === undefined)
+        if (value === undefined || value === "?")
             return <div className={styles.cell}>?</div>
 
         const timeClass = getTimeClass();
@@ -137,7 +142,7 @@ const TableCell = ({
         
 }
 
-function Table({columns, data, updateMyData, removeData, addLine}) {
+function Table({columns, data, updateMyData, removeData, addLine, onInstallClick}) {
     const defaultColumn = React.useMemo(
         () => ({
             minWidth: 5,
@@ -161,7 +166,8 @@ function Table({columns, data, updateMyData, removeData, addLine}) {
         defaultColumn,
         updateMyData,
         removeData,
-        addLine
+        addLine,
+        onInstallClick
     },
         useBlockLayout,
         useResizeColumns,
@@ -273,6 +279,7 @@ class ModTable extends React.Component
                         updateMyData={(...args) => {this.updateData(...args)}} 
                         removeData={(...args) => {this.removeData(...args)}}
                         addLine={this.addLine}
+                        onInstallClick={(...args) => {this.props.onInstallClick(...args)}}
                     />
                 </Styles>
             </div>

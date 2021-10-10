@@ -1,4 +1,5 @@
-const cheerio = window.require('cheerio');
+//const cheerio = window.require('cheerio');
+import {default as cheerio} from 'cheerio';
 
 function isComment(index, node) {
     return node.type === 'comment'

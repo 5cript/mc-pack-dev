@@ -36,8 +36,21 @@
     color: var(--foreground-color);
 }
 
+.updateButton {
+    cursor: pointer;
+    width: 16px;
+    margin-top: 1px;
+    margin-left: 4px;
+    height: 16px;
+    text-align: center;
+    font-size: 10px;
+    color: #55ff77;
+}
+
 .table {
     border: 1px solid var(--background-color-very-bright);
+    overflow-y: scroll;
+    max-height: 500px;
 }
 
 .tableRowCell {
