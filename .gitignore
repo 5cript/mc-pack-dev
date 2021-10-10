@@ -54,3 +54,7 @@ npm-debug.log.*
 .vscode
 .eslintignore
 yarn.lock
+
+app/main.prod.js.LICENSE.txt
+app/package-lock.json
+package-lock.json
