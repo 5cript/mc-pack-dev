@@ -58,3 +58,6 @@ yarn.lock
 app/main.prod.js.LICENSE.txt
 app/package-lock.json
 package-lock.json
+
+dummy_dir
+updater_server/build
