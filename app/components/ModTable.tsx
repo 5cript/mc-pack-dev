@@ -1,59 +1,12 @@
 import React from 'react';
 
 // Components
-import { useTable, useBlockLayout, useResizeColumns } from 'react-table';
+import { useTable, useBlockLayout } from 'react-table';
 
 import classNames from 'classnames';
 import moment from 'moment';
-import styled from 'styled-components';
 
 import styles from './ModTable.css';
-
-const Styles = styled.div`
-    .table 
-    {
-        border-spacing: 0;
-        width: 100%;
-        height: 100%;
-
-        .th {
-            background-color: var(--theme-darker);
-            font-weight: bold;
-        }
-
-        .th,
-        .td {
-            margin: 0;
-            position: relative;
-            padding: 1px;
-            padding-left: 3px;
-            border-bottom: 1px solid var(--foreground-color);
-            border-right: 1px solid var(--foreground-color);
-
-            :last-child {
-                width: 100%;
-            }
-
-            .resizer {
-                display: inline-block;
-                background: white;
-                width: 3px;
-                height: 100%;
-                position: absolute;
-                right: 0;
-                top: 0;
-                transform: translateX(50%);
-                z-index: 1;
-                ${'' /* prevents from scrolling while dragging on touch devices */}
-                touch-action:none;
-        
-                &.isResizing {
-                    background: var(--theme-color);
-                }
-            }
-        }
-    }
-`
 
 const TableCell = ({
     value: initialValue,
@@ -137,6 +90,10 @@ const TableCell = ({
             {moment(value.newest).format("D. MMM YYYY - HH:mm:ss")}
         </div>
     }
+    else if (id === 'version')
+    {
+        return <div style={{width:'100%'}}>{value}</div>
+    }
     else
         return <div className={styles.cell}>{value}</div>
         
@@ -170,7 +127,6 @@ function Table({columns, data, updateMyData, removeData, addLine, onInstallClick
         onInstallClick
     },
         useBlockLayout,
-        useResizeColumns,
         hooks => {
             hooks.visibleColumns.push(columns => {
                 return [
@@ -197,11 +153,6 @@ function Table({columns, data, updateMyData, removeData, addLine, onInstallClick
                         {headerGroup.headers.map(column => (
                             <div {...column.getHeaderProps()} className={styles.tableHeadCell}>
                                 {column.render('Header')}
-                                {/* Use column.getResizerProps to hook up the events correctly */}
-                                <div
-                                    {...column.getResizerProps()}
-                                    className={`resizer${column.isResizing ? ' isResizing' : ''}`}
-                                />
                             </div>
                         ))}
                     </div>
@@ -211,11 +162,21 @@ function Table({columns, data, updateMyData, removeData, addLine, onInstallClick
             <div {...getTableBodyProps()}>
                 {rows.map((row, i) => {
                     prepareRow(row)
+                    let rowProps = row.getRowProps();
+                    rowProps.style.width = "100%";
                     return (
-                        <div {...row.getRowProps()} className={styles.tableRow}>
-                            {row.cells.map(cell => {
+                        <div {...rowProps} className={styles.tableRow}>
+                            {row.cells.map((cell, i) => {
+                                let cellProps = cell.getCellProps();
+                                cellProps.style.minWidth = cellProps.style.width;
+                                delete cellProps.style.width;
+                                if (i === row.cells.length - 1)
+                                {
+                                    cellProps.style.width = '100%';
+                                }
+                                console.log(cellProps);
                                 return (
-                                    <div {...cell.getCellProps()} className={styles.tableRowCell}>
+                                    <div {...cellProps} className={styles.tableRowCell}>
                                         {cell.render('Cell')}
                                     </div>
                                 )
@@ -272,16 +233,14 @@ class ModTable extends React.Component
     {
         return (
             <div className={styles.modTable}>
-                <Styles>
-                    <Table 
-                        columns={this.props.columns} 
-                        data={this.props.data} 
-                        updateMyData={(...args) => {this.updateData(...args)}} 
-                        removeData={(...args) => {this.removeData(...args)}}
-                        addLine={this.addLine}
-                        onInstallClick={(...args) => {this.props.onInstallClick(...args)}}
-                    />
-                </Styles>
+                <Table 
+                    columns={this.props.columns} 
+                    data={this.props.data} 
+                    updateMyData={(...args) => {this.updateData(...args)}} 
+                    removeData={(...args) => {this.removeData(...args)}}
+                    addLine={this.addLine}
+                    onInstallClick={(...args) => {this.props.onInstallClick(...args)}}
+                />
             </div>
         );
     }

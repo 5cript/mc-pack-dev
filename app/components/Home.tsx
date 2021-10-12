@@ -171,7 +171,7 @@ class Home extends React.Component<HomeProps>
 
 	loadModFromRemote = (id: number, mcVersions: Array<string>, fabric: boolean) =>
 	{
-		console.log(mcVersions);
+		//console.log(mcVersions);
 		return Promise.all([curseforge.getMod(id), curseforge.getModFiles(id).then((modFiles: any) => {
 			modFiles = modFiles.filter((file: any) => {
 				const isFabric = file.minecraft_versions.find((version : string) => {
@@ -1234,13 +1234,15 @@ class Home extends React.Component<HomeProps>
 											return "not installed";
 										return installed;
 									},
+									id: 'installed_file',
 									width: 400
 								},
 								{
 									Header: 'Version',
 									accessor: (mod: Mod) => {
 										return JSON.stringify(mod.latestFile.minecraft_versions);
-									}
+									},
+									id: 'version'
 								}
 							]}
 							onChange={() => {}}

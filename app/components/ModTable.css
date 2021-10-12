@@ -23,6 +23,7 @@
 .tableRow {
     background-color: var(--background-color-brighter);
     border-bottom: 1px solid var(--background-color-very-bright);
+
 }
 
 .removeButton {
@@ -51,6 +52,8 @@
     border: 1px solid var(--background-color-very-bright);
     overflow-y: scroll;
     max-height: 500px;
+    display: inline-grid;
+    width: calc(100% - 5px);
 }
 
 .tableRowCell {
