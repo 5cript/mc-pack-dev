@@ -34,6 +34,22 @@ const updateConfigPath = pathTools.join(thisPath, 'updater.json');
   "ignoreMods": ["Optifine"]
 }
 */
+
+class FileDownloadHandler
+{
+  clearFile = async (name) => {
+    const path = pathTools.join(process.cwd(), relativeClientPath, 'mods', name)
+    return fsPromise.access(path, fs.constants.F_OK).then(() => {
+      fsPromise.truncate(path, 0);
+    }).catch(()=>{});
+  }
+
+  appendToFile = async (name, data) => {
+    const path = pathTools.join(process.cwd(), relativeClientPath, 'mods', name)
+    return fsPromise.appendFile(path, Buffer.from(data.buffer));
+  }
+}
+
 contextBridge.exposeInMainWorld('localClient', 
 {
   enumerateMods: async () => {
@@ -48,5 +64,11 @@ contextBridge.exposeInMainWorld('localClient',
       });
       return filtered;
     });
+  },
+  makeModFileHandler: () => {
+    return new FileDownloadHandler();
+  },
+  removeMod: async (name) => {
+    return fsPromise.unlink(pathTools.join(relativeClientPath, 'mods', name));
   }
 });

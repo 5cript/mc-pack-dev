@@ -1,6 +1,8 @@
 export interface ILocalCient {
     enumerateMods: () => Promise<any>,
-    filterModDeletion: (deleteList: Array<string>) => Promise<any>
+    filterModDeletion: (deleteList: Array<string>) => Promise<any>,
+    makeModFileHandler: () => any,
+    removeMod: (name: string) => void
 }
 
 declare global {

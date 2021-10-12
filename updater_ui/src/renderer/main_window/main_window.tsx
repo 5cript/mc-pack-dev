@@ -13,15 +13,52 @@ class MainWindow extends React.Component
     }
 
     getTotalProgress = () => {
-        return this.state.loadedFiles / (this.state.totalFiles > 0 ? this.state.totalFiles : 1);
+        return Math.round(100 * (this.state.loadedFiles / (this.state.totalFiles > 0 ? this.state.totalFiles : 1)));
     }
 
     getFileProgress = () => {
-        return this.state.downloadFileTotalBytes / (this.state.downloadFileCurrentBytes > 0 ? this.state.downloadFileCurrentBytes : 1);
+        return Math.round(100 * (this.state.downloadFileCurrentBytes / (this.state.downloadFileTotalBytes > 0 ? this.state.downloadFileTotalBytes : 1)));
     }
 
-    fetchCurrentUpdate = () => {
+    onFileProgress = (current: number, total: number) => {
+        this.setState({
+            downloadFileCurrentBytes: current,
+            downloadFileTotalBytes: total
+        })
+    }
 
+    onTotalProgress = (file: string, current: number, total: number) => {
+        console.log(file, current, total)
+        this.setState({
+            currentFileName: file,
+            totalFiles: total,
+            loadedFiles: current,
+        })
+    }
+
+    fetchCurrentUpdate = async () => {
+        let client = new UpdateClient({address: "localhost", port: 25002});
+        const diff = await client.getModsDifference();
+        if (diff.message) {
+            console.error(diff.message);
+            return;
+        }
+        console.log(diff);
+        client.downloadMods(diff.toDownload, this.onFileProgress, this.onTotalProgress, window.localClient.makeModFileHandler());
+        diff.toRemove.forEach(async (mod: string) => {await window.localClient.removeMod(mod)});
+    }
+
+    getFileProgressText = () => {
+        const biggestUnit = (value: number) => {
+            const units = ["B", "KiB", "MiB", "GiB"]
+            let i = 0;
+            for (; i != 4 && value / 1024 > 1; ++i)
+            {
+                value /= 1024;
+            }
+            return {value: Math.round(value), unit: units[i], joined: Math.round(value) + " " + units[i]};
+        }
+        return biggestUnit(this.state.downloadFileCurrentBytes).value + "/" + biggestUnit(this.state.downloadFileTotalBytes).joined;
     }
 
     render = () => 
@@ -47,6 +84,7 @@ class MainWindow extends React.Component
                 borderRadius={"0px"}
                 bgColor={"lime"}
                 labelColor={"black"}
+                transitionDuration={"100ms"}
             />
             <div style={{
                 height: "20px",
@@ -57,22 +95,17 @@ class MainWindow extends React.Component
                 <div>{this.state.currentFileName}</div>
                 <div style={{
                     marginLeft: "auto"
-                }}>{this.state.downloadFileCurrentBytes + "/" + this.state.downloadFileTotalBytes}</div>
+                }}>{this.getFileProgressText()}</div>
             </div>
             <ProgressBar 
-                completed={this.getTotalProgress()} 
+                completed={this.getFileProgress()} 
                 borderRadius={"0px"}
                 bgColor={"magenta"}
                 labelColor={"black"}
+                transitionDuration={"0s"}
             />
             <button onClick={async () => {
-                let client = new UpdateClient({address: "localhost", port: 25002});
-                const diff = await client.getModsDifference();
-                if (diff.message) {
-                    console.error(diff.message);
-                    return;
-                }
-                console.log(diff);
+                this.fetchCurrentUpdate();
             }}>
                 Update
             </button>

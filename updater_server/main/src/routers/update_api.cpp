@@ -55,6 +55,6 @@ void UpdateApi::addHttpEndpoints(attender::http_server& server)
     
     server.get("/download_mod/:fileName", [this](auto req, auto res) {
         enable_cors(req, res);
-        res->status(200).type(".jar").send_file(agent_.getModPath(req->param("fileName")));
+        res->status(200).type(".jar").send_file(agent_.getModPath(req->param("fileName")).string());
     });
 }
