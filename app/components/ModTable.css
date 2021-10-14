@@ -51,8 +51,9 @@
 .table {
     border: 1px solid var(--background-color-very-bright);
     overflow-y: scroll;
-    max-height: 500px;
     display: inline-grid;
+    position: relative;
+    height: 100%;
     width: calc(100% - 5px);
 }
 

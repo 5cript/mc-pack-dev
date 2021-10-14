@@ -9,6 +9,10 @@ export const StyledButton = styled(Button)({
     color: 'var(--foreground-color)',
     '&:hover': {
         background: 'var(--theme-color)'
+    },
+    '&:disabled': {
+        background: 'var(--background-disabled)',
+        color: 'var(--foreground-color)'
     }
 });
 
@@ -20,6 +24,10 @@ export const SlimButton = styled(Button)({
     color: 'var(--foreground-color)',
     '&:hover': {
         background: 'var(--theme-color)'
+    },
+    '&:disabled': {
+        background: 'var(--background-disabled)',
+        color: 'var(--foreground-color)'
     }
 });
 

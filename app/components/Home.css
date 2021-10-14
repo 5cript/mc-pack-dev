@@ -4,7 +4,10 @@
 	height: 100%;
 	width: calc(100% - 16px);
 	background-color: #303030;
-	border-bottom: 1px solid black;
+	display: flex;
+	flex-direction: column;
+	overflow-y: hidden;
+	box-sizing: border-box;
 }
 
 .packArea {
@@ -16,14 +19,33 @@
 	margin-bottom: 8px;
 }
 
-.modTableArea {
+.packOptionsArea {
+	display: flex;
+	align-items: center;
+	border: 1px solid var(--background-color-very-bright);
 	background-color: var(--background-color-darker);
 	padding: 10px;
+	margin-bottom: 8px;
+}
+
+.modTableArea {
+	background-color: var(--background-color-darker);
+	border: 1px solid var(--background-color-very-bright);
+	padding: 10px;
+	display: flex;
+	flex-direction: column;
+	height: calc(100% - 100px);
+}
+
+.tableRegion {
+	padding-top: 8px;
+	height: calc(100% - 120px);
 }
 
 .openedPack {
 	border: 1px solid var(--foreground-color);
 	background-color: var(--background-color-brighter);
+	border-radius: 3px;
 	min-width: 5px;
 	flex: 1;
 	height: 24px;
@@ -32,6 +54,10 @@
 	margin-right: 8px;
 	padding-left: 8px;
 	padding-top: 8px;
+}
+
+.modTable {
+	border: 1px solid var(--background-color-very-bright);
 }
 
 .container h2 {
@@ -101,23 +127,6 @@
 	align-items: stretch;
 	flex-direction: row;
 	width: 100%;
-}
-
-.modTable {
-	border: 1px solid var(--background-color-very-bright);
-}
-
-.tableRegion {
-	padding-top: 8px;
-}
-
-.packOptionsArea {
-	display: flex;
-	align-items: center;
-	border: 1px solid var(--background-color-very-bright);
-	background-color: var(--background-color-darker);
-	padding: 10px;
-	margin-bottom: 8px;
 }
 
 .modAddRegion {

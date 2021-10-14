@@ -232,16 +232,14 @@ class ModTable extends React.Component
     render()
     {
         return (
-            <div className={styles.modTable}>
-                <Table 
-                    columns={this.props.columns} 
-                    data={this.props.data} 
-                    updateMyData={(...args) => {this.updateData(...args)}} 
-                    removeData={(...args) => {this.removeData(...args)}}
-                    addLine={this.addLine}
-                    onInstallClick={(...args) => {this.props.onInstallClick(...args)}}
-                />
-            </div>
+            <Table 
+                columns={this.props.columns} 
+                data={this.props.data} 
+                updateMyData={(...args) => {this.updateData(...args)}} 
+                removeData={(...args) => {this.removeData(...args)}}
+                addLine={this.addLine}
+                onInstallClick={(...args) => {this.props.onInstallClick(...args)}}
+            />
         );
     }
 }

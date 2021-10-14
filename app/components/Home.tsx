@@ -19,6 +19,7 @@ import ForgeScrape from '../minecraft/forge';
 import FabricScrape from '../minecraft/fabric';
 import { styled, ThemeProvider, createMuiTheme, withStyles } from '@material-ui/core/styles';
 import LauncherProfiles from '../minecraft/launcher_profiles';
+import ReactModal from 'react-modal-resizable-draggable';
 
 // node packages
 import electron from 'electron';
@@ -100,7 +101,8 @@ type HomeState = {
 	messageBoxText: string,
 	messageBoxVisible: boolean,
 	installProgress: number,
-	installTotal: number
+	installTotal: number,
+	initialLoading: boolean
 }
 type MessageBoxActions = {
 	yes: Function | undefined,
@@ -133,7 +135,8 @@ class Home extends React.Component<HomeProps>
 		messageBoxText: '',
 		messageBoxVisible: false,
 		installProgress: 0,
-		installTotal: 0
+		installTotal: 0,
+		initialLoading: true
 	};
 	messageBoxActions: MessageBoxActions = {yes: ()=>{}, no: ()=>{}, ok: ()=>{}};
 	throttledFetch: Function;
@@ -240,6 +243,9 @@ class Home extends React.Component<HomeProps>
 				const packParsed = JSON.parse(fs.readFileSync(pathTools.join(packInfo.metaDir, 'modpack.json')));
 				pack = packParsed;
 				pack.mods = await this.updateModList(packParsed.mods, packParsed.fabric);
+				this.setState({
+					initialLoading: false
+				});
 				console.log(pack.mods);
 			}
 			catch(e)
@@ -1035,6 +1041,24 @@ class Home extends React.Component<HomeProps>
 	{
 		return (
 			<div className={styles.container} data-tid="container">
+				<ReactModal initWidth={500} initHeight={200} 
+					onFocus={() => {}}
+					className={styles.messageBoxModal}
+					onRequestClose={()=>{}} 
+					isOpen={this.state.initialLoading}
+					disableResize={true}
+					disableMove={true}
+					top={200}
+					left={300}
+					disableVerticalMove={true}
+					disableHorizontalMove={true}
+				>
+					<div style={{
+						paddingTop: "30px",
+						paddingLeft: "8px",
+						fontSize: "18px"
+					}}>Loading</div>
+				</ReactModal>
 
 				<MessageBox
 					visible={this.state.messageBoxVisible}
@@ -1073,11 +1097,14 @@ class Home extends React.Component<HomeProps>
 				<div className={styles.packArea}>
 					<div>Opened Pack: </div>
 					<div className={styles.openedPack}>{this.state.packInfo.directory}</div>
-					<SlimButton onClick={() => {
-						electron.remote.dialog.showOpenDialog({properties: ['openDirectory']}).then((dir) => {
-							this.openPack(dir.filePaths[0]);
-						})
-					}}>Open</SlimButton>
+					<SlimButton 
+						disabled={this.state.initialLoading} 
+						onClick={() => {
+							electron.remote.dialog.showOpenDialog({properties: ['openDirectory']}).then((dir) => {
+								this.openPack(dir.filePaths[0]);
+							})
+						}}
+					>Open</SlimButton>
 				</div>
 				<div className={styles.packOptionsArea}>
 					<ThemeProvider theme={theme}>
@@ -1090,6 +1117,7 @@ class Home extends React.Component<HomeProps>
 									icon: this.props.classes.whiteColor
 								}}
 								*/
+								disabled={this.state.initialLoading}
 								value={this.state.pack.minecraftVersion}
 								onChange={(event) => {
 									let pack = _.clone(this.state.pack);
@@ -1109,11 +1137,14 @@ class Home extends React.Component<HomeProps>
 							</StyledSelect>
 						</StyledForm>
 						<StyledForm>
-							<StyledLabel id="forge_or_fabric_label">Forge or Fabric</StyledLabel>
+							<StyledLabel 
+								id="forge_or_fabric_label"
+							>Modloader</StyledLabel>
 							<StyledSelect
 								id="forge_or_fabric_select"
 								labelId="forge_or_fabric_label"
 								value={this.state.pack.fabric ? "Fabric" : "Forge"}
+								disabled={this.state.initialLoading}
 								onChange={(event) => {
 									let pack = _.clone(this.state.pack);
 									pack.fabric = event.target?.value === "Fabric";
@@ -1169,21 +1200,25 @@ class Home extends React.Component<HomeProps>
 						<div className={styles.modpackButtons}>
 							<StyledButton
 								onClick={this.initializePack}
+								disabled={this.state.initialLoading}
 							>
 								Initialize Pack
 							</StyledButton>
 							<StyledButton
 								onClick={this.reinstallMods}
+								disabled={this.state.initialLoading}
 							>
 								(Re)Install Mods
 							</StyledButton>
 							<StyledButton
 								onClick={this.updateMods}
+								disabled={this.state.initialLoading}
 							>
 								Update
 							</StyledButton>
 							<StyledButton
 								onClick={this.deployPack}
+								disabled={this.state.initialLoading}
 							>
 								Deploy
 							</StyledButton>
