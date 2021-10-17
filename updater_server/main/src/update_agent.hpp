@@ -25,6 +25,9 @@ public:
     std::filesystem::path getModPath(std::string const& name);
 
 private:
+    void loadLocalMods();
+
+private:
     std::filesystem::path selfDirectory_;
     std::vector <std::filesystem::path> localMods_;
 };

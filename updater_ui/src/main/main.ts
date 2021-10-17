@@ -14,7 +14,7 @@ import path from 'path';
 import { app, BrowserWindow, shell, ipcMain } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import log from 'electron-log';
-import MenuBuilder from './menu';
+//import MenuBuilder from './menu';
 import { resolveHtmlPath } from './util';
 
 export default class AppUpdater {
@@ -99,8 +99,8 @@ const createWindow = async () => {
     mainWindow = null;
   });
 
-  const menuBuilder = new MenuBuilder(mainWindow);
-  menuBuilder.buildMenu();
+  //const menuBuilder = new MenuBuilder(mainWindow);
+  //menuBuilder.buildMenu();
 
   // Open urls in the user's browser
   mainWindow.webContents.on('new-window', (event, url) => {
@@ -136,3 +136,15 @@ app
     });
   })
   .catch(console.log);
+
+ipcMain.on("hide", () => {
+  mainWindow?.hide();
+})
+
+ipcMain.handle('isPackaged', async () => {
+  return app.isPackaged;
+})
+
+ipcMain.handle('close', async () => {
+  return mainWindow?.close();
+})

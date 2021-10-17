@@ -174,7 +174,6 @@ function Table({columns, data, updateMyData, removeData, addLine, onInstallClick
                                 {
                                     cellProps.style.width = '100%';
                                 }
-                                console.log(cellProps);
                                 return (
                                     <div {...cellProps} className={styles.tableRowCell}>
                                         {cell.render('Cell')}

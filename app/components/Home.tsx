@@ -945,12 +945,33 @@ class Home extends React.Component<HomeProps>
 		const copyOver = (...args: Array<string>) => {this.copyOver(currentDeploymentDest, ...args)};
 		const createDirInDest = (...args: Array<string>) => {this.createDirInDest(currentDeploymentDest, ...args)};
 
-		copyOver("run.bat");
+		const createUpdater = (path: string) => 
+		{
+			createDirInDest("client", "mods");
+			fsExtra.copySync(path, currentDeploymentDest);
+			fs.writeFileSync(pathTools.join(currentDeploymentDest, 'updater.json'), (() => {
+				return JSON.stringify({
+					ignoreMods: [],
+					updateServerIp: 'www.5cript.net',
+					updateServerPort: 25002
+				})
+			})());
+		}
+
 		createDirInDest("client");
+		const updaterDevPath = pathTools.join(process.cwd(), 'updater_ui', 'release', 'build', 'win-unpacked')
+		if (fs.existsSync(pathTools.join(process.cwd(), 'updater'))) {
+			createUpdater(pathTools.join(process.cwd(), 'updater'));
+		} else if (fs.existsSync(updaterDevPath)) {
+			createUpdater(updaterDevPath);
+		}
+		else {
+			copyOver("run.bat");
+			copyOver("client", "mods");
+		}
 		copyOver("mcpackdev");
 		copyOver("client", "config");
 		copyOver("client", "libraries");
-		copyOver("client", "mods");
 		copyOver("client", "scripts");
 		copyOver("client", "versions");
 		copyOver("client", "shaderpacks");

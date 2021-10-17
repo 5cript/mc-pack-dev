@@ -3,6 +3,11 @@ interface Endpoint {
     port: number;
 }
 
+interface FileWithHash {
+    name: string;
+    hash: string;
+}
+
 /*
 interface FileOperationInstructions {
     toRemove: Array<string>;
@@ -10,13 +15,17 @@ interface FileOperationInstructions {
 }
 */
 
+type HashProgressCallback = (currentFile: string, currentHash: number, totalHash: number) => void;
+
 class UpdateClient
 {
     remoteEndpoint: Endpoint;
+    hashProgress: number;
 
     constructor(remoteEndpoint: Endpoint)
     {
         this.remoteEndpoint = remoteEndpoint
+        this.hashProgress = 0;
     }
 
     url = (path: string) =>
@@ -24,7 +33,7 @@ class UpdateClient
         return "http://" + this.remoteEndpoint.address + ":" + this.remoteEndpoint.port + path;
     }
 
-    getModsDifference = async () =>
+    getModsDifference = async (hashProgress: HashProgressCallback) =>
     {
         try 
         {
@@ -34,13 +43,8 @@ class UpdateClient
                     'Accept': 'application/json'
                 },
                 body: await (async () => {
-                    const modList = await this.enumerateLocalMods();
-                    return JSON.stringify({mods: modList.map(mod => {
-                        return {
-                            name: mod,
-                            hash: ''
-                        }
-                    })})
+                    const modList = await this.enumerateLocalMods(hashProgress);
+                    return JSON.stringify({mods: modList});
                 })()
             });
             if (response.headers.get('content-type')?.includes("application/json")) {
@@ -55,6 +59,7 @@ class UpdateClient
             }            
         }
         catch(exc: any) {
+            console.log(exc)
             return {
                 message: exc.message                
             }
@@ -109,12 +114,16 @@ class UpdateClient
                     onTotalProgress('Done!', list.length, list.length);
             })
         };
-        downloadOne(0);
+        if (list.length > 0)
+            downloadOne(0);
     }
 
-    enumerateLocalMods = (): Promise<Array<string>> => 
+    enumerateLocalMods = (hashProgress: HashProgressCallback) : Promise<Array<FileWithHash>> => 
     {
-        return window.localClient.enumerateMods();
+        this.hashProgress = 0
+        return window.localClient.enumerateMods((current, total) => {
+            hashProgress(current, ++this.hashProgress, total);
+        });
     }
 }
 

@@ -14,9 +14,9 @@ namespace
 std::filesystem::path getBasePath(std::filesystem::path const& selfDirectory)
 {
 #ifdef NDEBUG
-    return selfDirectory / "client";
+    return selfDirectory;
 #else
-    return selfDirectory.parent_path().parent_path().parent_path() / "dummy_dir" / "client";
+    return selfDirectory.parent_path().parent_path().parent_path() / "dummy_dir" / "server";
 #endif
 }
 
@@ -27,11 +27,17 @@ UpdateAgent::UpdateAgent(std::filesystem::path const& selfDirectory)
     : selfDirectory_{selfDirectory}
     , localMods_{}
 {
+    loadLocalMods();
+}
+//---------------------------------------------------------------------------------------------------------------------
+void UpdateAgent::loadLocalMods()
+{
     try
     {    
         const auto basePath = getBasePath(selfDirectory_);
         std::filesystem::directory_iterator mods{basePath / "mods"}, end;
 
+        localMods_.clear();
         for (; mods != end; ++mods)
         {
             localMods_.push_back(mods->path());
@@ -51,6 +57,8 @@ std::filesystem::path UpdateAgent::getModPath(std::string const& name)
 //---------------------------------------------------------------------------------------------------------------------
 UpdateInstructions UpdateAgent::buildDifference(std::vector <UpdateFile> const& remoteFiles) const
 {
+    loadLocalMods();
+
     std::set <std::string> remoteSet, localSet;
     std::transform(
         std::begin(remoteFiles), 
@@ -94,17 +102,18 @@ UpdateInstructions UpdateAgent::buildDifference(std::vector <UpdateFile> const& 
     );
 
     const auto basePath = getBasePath(selfDirectory_);
+    std::cout << "-------------------------\n";
     for (auto const& remote : remoteFiles)
     {
-        if (equal.find(remote.path.string()) != std::end(equal) && !remote.sha256.empty() && sha256(basePath / "mods" / remote.path.string()) != remote.sha256)
+        if (equal.find(remote.path.string()) != std::end(equal) && !remote.sha256.empty() && sha256FromFile(basePath / "mods" / remote.path.string()) != remote.sha256)
         {
             fresh.push_back(remote.path.string());
             old.push_back(remote.path.string());
         }
     }
 
-    fmt::print("FRESH\n{}\n\n\n", fresh);
-    fmt::print("OUTDATED\n{}\n", old);
+    //fmt::print("FRESH\n{}\n\n\n", fresh);
+    //fmt::print("OUTDATED\n{}\n", old);
 
     return UpdateInstructions{
         .download = fresh,

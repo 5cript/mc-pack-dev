@@ -61,3 +61,4 @@ package-lock.json
 
 dummy_dir
 updater_server/build
+updater_server/build_release

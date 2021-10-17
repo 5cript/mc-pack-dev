@@ -9,6 +9,9 @@ class MainWindow extends React.Component
         loadedFiles: 0,
         downloadFileTotalBytes: 0,
         downloadFileCurrentBytes: 0,
+        hashProgress: 0,
+        hashTotal: 0,
+        hashCurrentFile: 'No File',
         currentFileName: 'No File'
     }
 
@@ -27,25 +30,44 @@ class MainWindow extends React.Component
         })
     }
 
+    getHashProgress = () => {
+        return Math.round(100 * (this.state.hashProgress / (this.state.hashTotal > 0 ? this.state.hashTotal : 1)));
+    }
+
     onTotalProgress = (file: string, current: number, total: number) => {
         console.log(file, current, total)
+        let done = current === total;
         this.setState({
-            currentFileName: file,
+            currentFileName: done ? 'Complete' : file,
             totalFiles: total,
             loadedFiles: current,
         })
+        if (done)
+            this.onDone();
+    }
+
+    onDone = () => {
+        window.localClient.runClient();
     }
 
     fetchCurrentUpdate = async () => {
-        let client = new UpdateClient({address: "localhost", port: 25002});
-        const diff = await client.getModsDifference();
-        if (diff.message) {
-            console.error(diff.message);
-            return;
-        }
-        console.log(diff);
-        client.downloadMods(diff.toDownload, this.onFileProgress, this.onTotalProgress, window.localClient.makeModFileHandler());
-        diff.toRemove.forEach(async (mod: string) => {await window.localClient.removeMod(mod)});
+        window.localClient.getConfig().then(async (config: any) => {
+            let client = new UpdateClient({address: config.updateServerIp ? config.updateServerIp : "localhost", port: config.updateServerPort ? config.updateServerPort : 25002});
+            const diff = await client.getModsDifference((currentFile: string, current: number, total: number) => {
+                this.setState({
+                    hashProgress: current,
+                    hashTotal: total,
+                    hashCurrentFile: currentFile,
+                })
+            });
+            if (diff.message) {
+                console.error(diff.message);
+                return;
+            }
+            console.log(diff);
+            await Promise.all(diff.toRemove.map(async (mod: string) => {return window.localClient.removeMod(mod)}));
+            await client.downloadMods(diff.toDownload, this.onFileProgress, this.onTotalProgress, window.localClient.makeModFileHandler());
+        })
     }
 
     getFileProgressText = () => {
@@ -61,6 +83,10 @@ class MainWindow extends React.Component
         return biggestUnit(this.state.downloadFileCurrentBytes).value + "/" + biggestUnit(this.state.downloadFileTotalBytes).joined;
     }
 
+    componentDidMount = () => {
+        this.fetchCurrentUpdate();
+    }
+
     render = () => 
     {
         return <div style={{
@@ -69,6 +95,28 @@ class MainWindow extends React.Component
             left: "5px",
             width: "calc(100% - 15px)"
         }}>
+            <div style={{
+                width: "100%",
+                paddingBottom: "2px",
+                display: "flex"
+            }}>
+                <div>Hash Progress</div>
+                <div style={{
+                    marginLeft: "auto"
+                }}>{this.state.hashCurrentFile}</div>
+            </div>
+            <ProgressBar 
+                completed={this.getHashProgress()} 
+                borderRadius={"0px"}
+                bgColor={"yellow"}
+                labelColor={"black"}
+                transitionDuration={"100ms"}
+            />
+            <div style={{
+                height: "10px",
+                display: "flex"
+            }}/>
+
             <div style={{
                 width: "100%",
                 paddingBottom: "2px",
@@ -92,7 +140,7 @@ class MainWindow extends React.Component
                 paddingTop: "10px"
             }}>
                 
-                <div>{this.state.currentFileName}</div>
+            <div>{this.state.currentFileName}</div>
                 <div style={{
                     marginLeft: "auto"
                 }}>{this.getFileProgressText()}</div>
@@ -104,11 +152,6 @@ class MainWindow extends React.Component
                 labelColor={"black"}
                 transitionDuration={"0s"}
             />
-            <button onClick={async () => {
-                this.fetchCurrentUpdate();
-            }}>
-                Update
-            </button>
         </div>
     }
 }

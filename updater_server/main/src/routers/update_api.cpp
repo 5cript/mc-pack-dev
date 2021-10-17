@@ -30,7 +30,6 @@ void UpdateApi::addHttpEndpoints(attender::http_server& server)
                         return res->status(400).type(".txt").send("Expecting an object like: {\"mods\": [{\"name\": \"asdf\", \"hash\": \"asdasd\"}]}");
                     }
                     auto json = json::parse(*content);
-                    std::cout << json.dump() << "\n";
                     std::vector <UpdateFile> files;
                     for (auto const& mod : json["mods"])
                     {
