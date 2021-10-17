@@ -22,6 +22,7 @@ void UpdateApi::addHttpEndpoints(attender::http_server& server)
     server.post("/make_file_difference", [this](auto req, auto res) {
         enable_cors(req, res);
         auto content = std::make_shared <std::string>();
+        std::cout << "Diff Request From: " << req->ipv6Address() << "\n";
         req->read_body(*content).then(
             [content{content}, res, this]() {
                 try {

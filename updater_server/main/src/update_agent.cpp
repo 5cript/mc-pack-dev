@@ -11,6 +11,8 @@
 namespace 
 {
 
+constexpr char const* modsDirName = "mods_for_download";
+
 std::filesystem::path getBasePath(std::filesystem::path const& selfDirectory)
 {
 #ifdef NDEBUG
@@ -35,7 +37,7 @@ void UpdateAgent::loadLocalMods()
     try
     {    
         const auto basePath = getBasePath(selfDirectory_);
-        std::filesystem::directory_iterator mods{basePath / "mods"}, end;
+        std::filesystem::directory_iterator mods{basePath / modsDirName}, end;
 
         localMods_.clear();
         for (; mods != end; ++mods)
@@ -52,7 +54,7 @@ void UpdateAgent::loadLocalMods()
 //---------------------------------------------------------------------------------------------------------------------
 std::filesystem::path UpdateAgent::getModPath(std::string const& name)
 {
-    return getBasePath(selfDirectory_) / "mods" / name;
+    return getBasePath(selfDirectory_) / modsDirName / name;
 }
 //---------------------------------------------------------------------------------------------------------------------
 UpdateInstructions UpdateAgent::buildDifference(std::vector <UpdateFile> const& remoteFiles)
@@ -102,18 +104,17 @@ UpdateInstructions UpdateAgent::buildDifference(std::vector <UpdateFile> const& 
     );
 
     const auto basePath = getBasePath(selfDirectory_);
-    std::cout << "-------------------------\n";
     for (auto const& remote : remoteFiles)
     {
-        if (equal.find(remote.path.string()) != std::end(equal) && !remote.sha256.empty() && sha256FromFile(basePath / "mods" / remote.path.string()) != remote.sha256)
+        if (equal.find(remote.path.string()) != std::end(equal) && !remote.sha256.empty() && sha256FromFile(basePath / modsDirName / remote.path.string()) != remote.sha256)
         {
             fresh.push_back(remote.path.string());
             old.push_back(remote.path.string());
         }
     }
 
-    //fmt::print("FRESH\n{}\n\n\n", fresh);
-    //fmt::print("OUTDATED\n{}\n", old);
+    fmt::print("FRESH:\n{}\n---------------\n", fresh);
+    fmt::print("OUTDATED:\n{}\n---------------\n", old);
 
     return UpdateInstructions{
         .download = fresh,
