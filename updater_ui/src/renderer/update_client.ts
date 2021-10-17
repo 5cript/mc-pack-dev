@@ -8,6 +8,12 @@ interface FileWithHash {
     hash: string;
 }
 
+interface DiffResult {
+    toDownload: Array<string> | undefined;
+    toRemove: Array<string> | undefined;
+    message: string | undefined
+}
+
 /*
 interface FileOperationInstructions {
     toRemove: Array<string>;
@@ -33,35 +39,44 @@ class UpdateClient
         return "http://" + this.remoteEndpoint.address + ":" + this.remoteEndpoint.port + path;
     }
 
-    getModsDifference = async (hashProgress: HashProgressCallback) =>
+    getModsDifference = async (hashProgress: HashProgressCallback) : Promise<DiffResult> =>
     {
         try 
         {
-            let response = await fetch(this.url("/make_file_difference"), {
-                method: 'POST',
-                headers: {
-                    'Accept': 'application/json'
-                },
-                body: await (async () => {
-                    const modList = await this.enumerateLocalMods(hashProgress);
-                    return JSON.stringify({mods: modList});
-                })()
-            });
-            if (response.headers.get('content-type')?.includes("application/json")) {
-                const instructions = await response.json();
-                return {
-                    toRemove: await window.localClient.filterModDeletion(instructions.remove),
-                    toDownload: instructions.download
+            return await this.enumerateLocalMods(hashProgress).then(async (modList) : Promise<DiffResult> => {
+                let response = await fetch(this.url("/make_file_difference"), {
+                    method: 'POST',
+                    headers: {
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify({mods: modList})
+                }).catch(err => {
+                    console.error(err)
+                    return undefined;
+                }).then(x => x);
+                if (response === undefined) {
+                    console.error("Something went wrong with the diff fetch");
+                    return {message: "Something went wrong with the diff fetch", toDownload: undefined, toRemove: undefined};
                 }
-            }
-            else {
-                return {message: response.text()}
-            }            
+                if (response?.headers.get('content-type')?.includes("application/json")) {
+                    const instructions = await response?.json();
+                    return {
+                        toRemove: await window.localClient.filterModDeletion(instructions.remove),
+                        toDownload: instructions.download,
+                        message: undefined
+                    }
+                }
+                else {
+                    return {message: await response?.text(), toDownload: undefined, toRemove: undefined}
+                }      
+            })                  
         }
         catch(exc: any) {
             console.log(exc)
             return {
-                message: exc.message                
+                message: exc.message, 
+                toDownload: undefined, 
+                toRemove: undefined                
             }
         }
     }

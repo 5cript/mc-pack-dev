@@ -64,9 +64,10 @@ class MainWindow extends React.Component
                 console.error(diff.message);
                 return;
             }
-            console.log(diff);
-            await Promise.all(diff.toRemove.map(async (mod: string) => {return window.localClient.removeMod(mod)}));
-            await client.downloadMods(diff.toDownload, this.onFileProgress, this.onTotalProgress, window.localClient.makeModFileHandler());
+            if (diff.toRemove && diff.toDownload) {
+                await Promise.all(diff.toRemove.map(async (mod: string) => {return window.localClient.removeMod(mod)}));
+                await client.downloadMods(diff.toDownload, this.onFileProgress, this.onTotalProgress, window.localClient.makeModFileHandler());
+            }
         })
     }
 

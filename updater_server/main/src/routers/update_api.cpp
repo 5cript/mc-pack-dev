@@ -47,6 +47,11 @@ void UpdateApi::addHttpEndpoints(attender::http_server& server)
                 }
                 catch(std::exception const& exc)
                 {
+                    std::cout << "-------------------\n";
+                    std::cout << exc.what() << "\n";
+                    std::cout << "-------------------\n";
+                    std::cout << content << "\n";
+                    std::cout << "-------------------\n";
                     res->status(400).type(".txt").send(exc.what());
                 }
             }
