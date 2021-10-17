@@ -24,4 +24,7 @@ target_compile_options(${PROJECT_NAME} PUBLIC "$<$<CONFIG:RELEASE>:${RELEASE_OPT
 
 # Linking
 target_link_libraries(${PROJECT_NAME} PUBLIC attender fmt)
+if (UNIX)
+    target_link_libraries(${PROJECT_NAME} PUBLIC pthread)
+endif (UNIX)
 #target_link_options(${PROJECT_NAME} PUBLIC "$<$<CONFIG:RELEASE>:-s>" "$<$<CONFIG:RELEASE>:-static-libstdc++>" "$<$<CONFIG:RELEASE>:-static-libgcc>")
