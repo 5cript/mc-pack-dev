@@ -55,7 +55,7 @@ std::filesystem::path UpdateAgent::getModPath(std::string const& name)
     return getBasePath(selfDirectory_) / "mods" / name;
 }
 //---------------------------------------------------------------------------------------------------------------------
-UpdateInstructions UpdateAgent::buildDifference(std::vector <UpdateFile> const& remoteFiles) const
+UpdateInstructions UpdateAgent::buildDifference(std::vector <UpdateFile> const& remoteFiles)
 {
     loadLocalMods();
 

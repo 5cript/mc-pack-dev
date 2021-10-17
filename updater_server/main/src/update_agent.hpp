@@ -21,7 +21,7 @@ class UpdateAgent
 public:
     UpdateAgent(std::filesystem::path const& selfDirectory);
 
-    UpdateInstructions buildDifference(std::vector <UpdateFile> const& remoteFiles) const;
+    UpdateInstructions buildDifference(std::vector <UpdateFile> const& remoteFiles);
     std::filesystem::path getModPath(std::string const& name);
 
 private:
