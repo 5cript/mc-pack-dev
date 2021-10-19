@@ -1,11 +1,13 @@
 #include "update_api.hpp"
 #include "router_base.hpp"
 #include "../sha256.hpp"
+#include "../temp_file.hpp"
 
 #include <attender/http/response.hpp>
 #include <attender/http/request.hpp>
 #include <nlohmann/json.hpp>
 
+#include <fstream>
 #include <iostream>
 
 using json = nlohmann::json;
@@ -61,5 +63,18 @@ void UpdateApi::addHttpEndpoints(attender::http_server& server)
     server.get("/download_mod/:fileName", [this](auto req, auto res) {
         enable_cors(req, res);
         res->status(200).type(".jar").send_file(agent_.getModPath(req->param("fileName")).string());
+    });
+
+    server.post("/upload_mods", [this](auto req, auto res) {
+        enable_cors(req, res);
+        auto content = std::make_shared <TempFile>("temp.tar");
+        req->read_body(*content).then([content, res, this]() {
+            content->close();
+            if (!agent_.installMods("temp.tar"))
+            {
+                return res->status(500).end();
+            }
+            res->end();
+        });
     });
 }

@@ -2,16 +2,19 @@
 #include "sha256.hpp"
 
 #include <fmt/ranges.h>
+#include <star-tape/star_tape.hpp>
 
+#include <filesystem>
 #include <algorithm>
 #include <iterator>
 #include <set>
 #include <iostream>
+#include <fstream>
 
 namespace 
 {
 
-constexpr char const* modsDirName = "mods_for_download";
+constexpr char const* modsDirName = "mods";
 
 std::filesystem::path getBasePath(std::filesystem::path const& selfDirectory)
 {
@@ -56,6 +59,58 @@ void UpdateAgent::loadLocalMods()
 std::filesystem::path UpdateAgent::getModPath(std::string const& name)
 {
     return getBasePath(selfDirectory_) / modsDirName / name;
+}
+//---------------------------------------------------------------------------------------------------------------------
+bool UpdateAgent::installMods(std::string const& tarFile)
+{
+    using namespace StarTape;
+    auto inputBundle = openInputFile(tarFile);
+    auto arch = archive(inputBundle);
+    auto index = arch.makeIndex();
+
+    std::error_code ec;
+    std::filesystem::create_directory(getBasePath(selfDirectory_) / "mods_upload_temp", ec);
+    if (ec)
+    {
+        std::cout << ec.message() << "\n";
+        return false;
+    }
+    for (auto const& i : index)
+    {
+        if (!i.fileName.empty() && (i.type == Constants::TypeFlags::RegularFile || i.type == Constants::TypeFlags::RegularFileAlternate))
+        {
+            std::cout << "Extracting: " << getBasePath(selfDirectory_) / "mods_upload_temp" / i.fileName << "\n";
+            std::ofstream writer(getBasePath(selfDirectory_) / "mods_upload_temp" / i.fileName, std::ios_base::binary);
+            if (!writer.good())
+            {
+                std::cout << "Extraction failed, aborting!\n";
+                return false;
+            }
+            index.writeFileToStream(i, writer);
+        }
+    }
+    if (std::filesystem::exists(getBasePath(selfDirectory_) / "mods_backup"))
+    {
+        std::filesystem::remove_all(getBasePath(selfDirectory_) / "mods_backup", ec);
+        if (ec)
+        {
+            std::cout << ec.message() << "\n";
+            return false;
+        }
+    }
+    std::filesystem::rename(getBasePath(selfDirectory_) / "mods", getBasePath(selfDirectory_) / "mods_backup", ec);
+    if (ec)
+    {
+        std::cout << ec.message() << "\n";
+        return false;
+    }
+    std::filesystem::rename(getBasePath(selfDirectory_) / "mods_upload_temp", getBasePath(selfDirectory_) / "mods", ec);
+    if (ec)
+    {
+        std::cout << ec.message() << "\n";
+        return false;
+    }
+    return true;
 }
 //---------------------------------------------------------------------------------------------------------------------
 UpdateInstructions UpdateAgent::buildDifference(std::vector <UpdateFile> const& remoteFiles)

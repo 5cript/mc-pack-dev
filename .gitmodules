@@ -1,3 +1,6 @@
 [submodule "updater_server/attender"]
 	path = updater_server/attender
 	url = https://github.com/5cript/attender.git
+[submodule "updater_server/star-tape"]
+	path = updater_server/star-tape
+	url = git@github.com:5cript/star-tape.git

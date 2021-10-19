@@ -6,7 +6,7 @@
 #include <fstream>
 #include <cstring>
 
-static std::string sha256FromFile(std::filesystem::path const& source)
+[[maybe_unused]] static std::string sha256FromFile(std::filesystem::path const& source)
 {
     unsigned char hash[SHA256_DIGEST_LENGTH];
     SHA256_CTX sha256;
