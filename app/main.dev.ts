@@ -11,11 +11,15 @@
 import 'core-js/stable';
 import 'regenerator-runtime/runtime';
 import path from 'path';
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, ipcMain } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import log from 'electron-log';
 import MenuBuilder from './menu';
-import sevenBin from '7zip-bin'
+import sevenBin from '7zip-bin';
+import http from 'http';
+import {default as fs} from 'fs';
+
+const fsPromise = fs.promises;
 
 export default class AppUpdater {
   constructor() {
@@ -111,7 +115,7 @@ const createWindow = async () => {
 
   // Remove this if your app does not use auto updates
   // eslint-disable-next-line
-  new AppUpdater();
+  // new AppUpdater();
 };
 
 /**
@@ -138,3 +142,28 @@ app.on('activate', () => {
   // dock icon is clicked and there are no other windows open.
   if (mainWindow === null) createWindow();
 });
+
+ipcMain.on('upload', (event: any, {addr, port, file}) => {
+  fsPromise.readFile(file).then(data => {
+    const req = http.request(
+      {
+        host: addr,
+        port: port,
+        path: "/upload_mods",
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-tar',
+          'Content-Length': data.length,
+        }
+      },
+      response => {
+        console.log(response.statusCode);
+      }
+    )
+    req.on('error', (err) => {
+      console.error(err);
+    })
+    req.write(data);
+    req.end();
+  })
+})

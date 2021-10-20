@@ -6,6 +6,7 @@ import Autosuggest from 'react-autosuggest';
 import MessageBox from './MessageBox';
 import _ from 'lodash';
 import moment from 'moment';
+import tar from 'tar';
 import MenuItem from '@material-ui/core/MenuItem';
 import InputLabel from '@material-ui/core/InputLabel';
 import { Line } from 'rc-progress';
@@ -102,13 +103,20 @@ type HomeState = {
 	messageBoxVisible: boolean,
 	installProgress: number,
 	installTotal: number,
-	initialLoading: boolean
+	initialLoading: boolean,
+	selectedServer: string
 }
 type MessageBoxActions = {
 	yes: Function | undefined,
 	no: Function | undefined,
 	ok: Function | undefined
 } | {}
+
+type ServerSettings = {
+	name: string,
+	ipAddr: string,
+	port: number
+};
 
 class Home extends React.Component<HomeProps>
 {
@@ -136,15 +144,18 @@ class Home extends React.Component<HomeProps>
 		messageBoxVisible: false,
 		installProgress: 0,
 		installTotal: 0,
-		initialLoading: true
+		initialLoading: true,
+		selectedServer: ''
 	};
 	messageBoxActions: MessageBoxActions = {yes: ()=>{}, no: ()=>{}, ok: ()=>{}};
 	throttledFetch: Function;
+	servers: Array<ServerSettings>;
 
 	constructor(props : HomeProps)
 	{
 		super(props);
 		this.forgeVersion = "";
+		this.servers = [];
 
 		this.loadPersistence();
 		(async () => {
@@ -309,6 +320,11 @@ class Home extends React.Component<HomeProps>
 		{
 			const contentStr = fs.readFileSync(persistence, {encoding: 'utf-8'});
 			const content = JSON.parse(contentStr);
+			this.servers = content.servers ? content.servers : [];
+			if (this.mounted)
+				this.setState({selectedServer: content.selectedServer})
+			else
+				this.state.selectedServer = content.selectedServer
 
 			this.openPack(content.lastOpened);
 		}
@@ -316,7 +332,6 @@ class Home extends React.Component<HomeProps>
 		{
 			console.log(e);
 		}
-
 	}
 
 	savePersistence = () => 
@@ -329,7 +344,9 @@ class Home extends React.Component<HomeProps>
 			fs.mkdirSync(packDevDir);
 
 		fs.writeFileSync(persistence, JSON.stringify({
-			lastOpened: this.state.packInfo.directory
+			lastOpened: this.state.packInfo.directory,
+			servers: this.servers,
+			selectedServer: this.state.selectedServer
 		}))
 	}
 
@@ -929,6 +946,13 @@ class Home extends React.Component<HomeProps>
 		}
 	}
 
+	getCurrentServer = () => 
+	{
+		return this.servers.find(server => {
+			return server.name === this.state.selectedServer;
+		})
+	}
+
 	deployPack = () => 
 	{
 		this.showMessageBox('Please wait for copy', 'Modal');
@@ -944,6 +968,7 @@ class Home extends React.Component<HomeProps>
 
 		const copyOver = (...args: Array<string>) => {this.copyOver(currentDeploymentDest, ...args)};
 		const createDirInDest = (...args: Array<string>) => {this.createDirInDest(currentDeploymentDest, ...args)};
+		const server = this.getCurrentServer();
 
 		const createUpdater = (path: string) => 
 		{
@@ -952,17 +977,17 @@ class Home extends React.Component<HomeProps>
 			fs.writeFileSync(pathTools.join(currentDeploymentDest, 'updater.json'), (() => {
 				return JSON.stringify({
 					ignoreMods: [],
-					updateServerIp: 'www.5cript.net',
-					updateServerPort: 25002
+					updateServerIp: server?.ipAddr,
+					updateServerPort: server?.port
 				})
 			})());
 		}
 
 		createDirInDest("client");
 		const updaterDevPath = pathTools.join(process.cwd(), 'updater_ui', 'release', 'build', 'win-unpacked')
-		if (fs.existsSync(pathTools.join(process.cwd(), 'updater'))) {
+		if (server && fs.existsSync(pathTools.join(process.cwd(), 'updater'))) {
 			createUpdater(pathTools.join(process.cwd(), 'updater'));
-		} else if (fs.existsSync(updaterDevPath)) {
+		} else if (server && fs.existsSync(updaterDevPath)) {
 			createUpdater(updaterDevPath);
 		}
 		else {
@@ -1029,7 +1054,36 @@ class Home extends React.Component<HomeProps>
 		})
 	}
 
-	onInstallClick = (index) => 
+	uploadPack = () => {
+		console.log('click!');
+		const server = this.getCurrentServer();
+		if (!server) {
+			console.log('no server selected');
+			return;
+		}
+
+		const files = fs.readdirSync(pathTools.join(this.state.packInfo.directory, 'client', 'mods')).map(file => {
+			//return pathTools.join(this.state.packInfo.directory, 'client', 'mods', file);
+			return file;
+		});
+		const tarTemp = pathTools.join(this.state.packInfo.directory, 'mods.tar');
+		console.log('Packing files: ', files)
+		tar.create(
+			{
+				file: tarTemp,
+				cwd: pathTools.join(this.state.packInfo.directory, 'client', 'mods')
+			},
+			files
+		).then(_ => {
+			electron.ipcRenderer.send('upload', {
+				addr: server.ipAddr,
+				port: server.port,
+				file: tarTemp
+			});
+		})
+	}
+
+	onInstallClick = (index: number) => 
 	{
 		let pack = _.cloneDeep(this.state.pack);
 
@@ -1184,6 +1238,28 @@ class Home extends React.Component<HomeProps>
 							})}						
 							</StyledSelect>
 						</StyledForm>
+						<StyledForm>
+							<StyledLabel id="server_label">Server</StyledLabel>
+							<StyledSelect
+								id="server_select"
+								labelId="server_label"
+								disabled={this.state.initialLoading}
+								value={this.state.selectedServer}
+								onChange={(event) => {
+									this.setState({
+										selectedServer: event.target.value
+									}, () => {
+										this.savePersistence();
+									})								
+								}}
+							>
+								{this.servers.map((val, i) => {
+									return (
+										<MenuItem key={i} value={val.name}>{val.name}</MenuItem>
+									)
+								})}
+							</StyledSelect>
+						</StyledForm>
 					</ThemeProvider>
 				</div>
 				<div className={styles.modTableArea}>
@@ -1242,6 +1318,12 @@ class Home extends React.Component<HomeProps>
 								disabled={this.state.initialLoading}
 							>
 								Deploy
+							</StyledButton>
+							<StyledButton
+								onClick={this.uploadPack}
+								disabled={this.state.initialLoading}
+							>
+								Upload
 							</StyledButton>
 						</div>
 					</div>
