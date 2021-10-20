@@ -170,6 +170,10 @@ class Home extends React.Component<HomeProps>
 		this.throttledFetch = _.debounce((value) => {
 			return this.onModSearchFetchRequest(value);
 		}, 150);
+
+		electron.ipcRenderer.on('upload-response', (event, {success}) => {
+			this.showMessageBox('Upload ' + (success ? 'was successful' : 'failed'), 'Ok');
+		})
 	}
 
 	simplifyVersion = (version: string) => 
@@ -1055,7 +1059,7 @@ class Home extends React.Component<HomeProps>
 	}
 
 	uploadPack = () => {
-		console.log('click!');
+		this.showMessageBox('Waiting...', 'Ok');
 		const server = this.getCurrentServer();
 		if (!server) {
 			console.log('no server selected');

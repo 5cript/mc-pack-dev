@@ -157,12 +157,18 @@ ipcMain.on('upload', (event: any, {addr, port, file}) => {
         }
       },
       response => {
-        console.log(response.statusCode);
+        event.reply('upload-response', {
+          success: response.statusCode === 200 || response.statusCode === 204
+        });
       }
     )
     req.on('error', (err) => {
       console.error(err);
-    })
+      event.reply('upload-response', {
+        success: false,
+        error: err
+      });
+    });
     req.write(data);
     req.end();
   })
