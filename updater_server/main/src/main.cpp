@@ -1,4 +1,5 @@
 #include "routers/update_api.hpp"
+#include "minecraft.hpp"
 
 #include <iostream>
 
@@ -20,8 +21,10 @@ int main(int argc, char** argv)
     // start server on port 80. Numbers are also valid
     server.start(std::to_string(port), "::");
 
-    std::filesystem::path self{argv[0]};
-    UpdateApi updateApi{server, self.parent_path()};
+    Minecraft minecraft;
+    UpdateApi updateApi{server, std::filesystem::path{argv[0]}.parent_path(), &minecraft};
 
+    minecraft.start();
     std::cin.get();
+    minecraft.stop();
 }

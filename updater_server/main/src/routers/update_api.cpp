@@ -12,8 +12,9 @@
 
 using json = nlohmann::json;
 
-UpdateApi::UpdateApi(attender::http_server& server, std::filesystem::path const& selfDirectory)
+UpdateApi::UpdateApi(attender::http_server& server, std::filesystem::path const& selfDirectory, Minecraft* minecraft)
     : agent_{selfDirectory}
+    , minecraft_{minecraft}
 {
     addHttpEndpoints(server);
 }
@@ -68,6 +69,10 @@ void UpdateApi::addHttpEndpoints(attender::http_server& server)
     cors_options(server, "/upload_mods", "POST");
     server.post("/upload_mods", [this](auto req, auto res) {
         enable_cors(req, res);
+        if (!minecraft_->stop())
+        {
+            return res->status(500).send("Cannot shutdown minecraft in time");
+        }
         auto content = std::make_shared <TempFile>("temp.tar");
         req->read_body(*content).then([content, res, this]() {
             content->close();
@@ -75,6 +80,7 @@ void UpdateApi::addHttpEndpoints(attender::http_server& server)
             {
                 return res->status(500).end();
             }
+            minecraft_->start();
             res->end();
         });
     });
