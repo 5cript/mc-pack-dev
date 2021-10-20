@@ -1,6 +1,8 @@
 #include <attender/http/response.hpp>
 #include <attender/http/request.hpp>
 
+#include <iostream>
+
 inline void enable_cors(attender::request_handler* req, attender::response_handler* res, std::string const& originString = "*")
 {
     auto origin = req->get_header_field("Origin");
@@ -20,8 +22,9 @@ inline void enable_cors(attender::request_handler* req, attender::response_handl
 template <typename T>
 inline void cors_options(T& server, std::string const& path, std::string const& allow, std::string const& originString = "*")
 {
-    server.options(path, [allow, originString](auto req, auto res)
+    server.options(path, [allow, originString, path](auto req, auto res)
     {
+        std::cout << "Preflight request for " << path << "\n";
         res->set("Allow", allow + ", OPTIONS");
         res->set("Connection", "keep-alive");
         enable_cors(req, res, originString);

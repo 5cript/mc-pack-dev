@@ -98,11 +98,14 @@ bool UpdateAgent::installMods(std::string const& tarFile)
             return false;
         }
     }
-    std::filesystem::rename(getBasePath(selfDirectory_) / "mods", getBasePath(selfDirectory_) / "mods_backup", ec);
-    if (ec)
+    if (std::filesystem::exists(getBasePath(selfDirectory_) / "mods"))
     {
-        std::cout << ec.message() << "\n";
-        return false;
+        std::filesystem::rename(getBasePath(selfDirectory_) / "mods", getBasePath(selfDirectory_) / "mods_backup", ec);
+        if (ec)
+        {
+            std::cout << ec.message() << "\n";
+            return false;
+        }
     }
     std::filesystem::rename(getBasePath(selfDirectory_) / "mods_upload_temp", getBasePath(selfDirectory_) / "mods", ec);
     if (ec)

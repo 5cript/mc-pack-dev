@@ -65,6 +65,7 @@ void UpdateApi::addHttpEndpoints(attender::http_server& server)
         res->status(200).type(".jar").send_file(agent_.getModPath(req->param("fileName")).string());
     });
 
+    cors_options(server, "/upload_mods", "POST");
     server.post("/upload_mods", [this](auto req, auto res) {
         enable_cors(req, res);
         auto content = std::make_shared <TempFile>("temp.tar");
