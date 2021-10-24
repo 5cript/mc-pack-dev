@@ -12,6 +12,7 @@ add_executable(${PROJECT_NAME}
     "src/main.cpp"
     "src/routers/update_api.cpp"
     "src/update_agent.cpp"
+    "src/minecraft.cpp"
 )
 
 set_property(TARGET ${PROJECT_NAME} PROPERTY CXX_STANDARD 20)

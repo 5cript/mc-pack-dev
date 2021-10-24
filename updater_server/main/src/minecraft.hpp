@@ -1,5 +1,8 @@
 #pragma once
 
+#ifndef __kernel_entry
+#define __kernel_entry
+#endif
 #include <boost/process.hpp>
 
 #include <memory>
@@ -9,26 +12,12 @@
 class Minecraft
 {
 public:
-    void start()
-    {
-        process_ = std::make_unique<boost::process::child>(
-            "java -jar ./fabric-server-launch.jar"
-        );
-    }
-    bool stop(int waitTimeoutSeconds = 60)
-    {
-        kill(process_->id(), SIGINT);
-        for (int i = 0; i != waitTimeoutSeconds; ++i)
-        {
-            std::cout << "Waiting for " << i << " seconds for minecraft to shutdown...\n";
-            if (process_->wait_for(std::chrono::seconds(1)))
-            {
-                return true;
-            }
-        }        
-        return false;
-    }
+    Minecraft();
+    void start();
+    bool stop(int waitTimeoutSeconds = 60);
+    void forwardIo();
 
 private:
     std::unique_ptr<boost::process::child> process_;
+    boost::asio::streambuf inputBuffer_;
 };

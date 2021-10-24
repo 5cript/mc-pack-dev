@@ -21,10 +21,10 @@ int main(int argc, char** argv)
     // start server on port 80. Numbers are also valid
     server.start(std::to_string(port), "::");
 
-    Minecraft minecraft;
+    Minecraft minecraft{};
     UpdateApi updateApi{server, std::filesystem::path{argv[0]}.parent_path(), &minecraft};
 
     minecraft.start();
-    std::cin.get();
+    minecraft.forwardIo();
     minecraft.stop();
 }
