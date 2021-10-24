@@ -35,5 +35,5 @@ void Minecraft::forwardIo()
     do {
         std::getline(std::cin, line);
     }
-    while (line != "exit");
+    while (line != "/stop");
 }
