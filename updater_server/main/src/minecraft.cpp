@@ -19,6 +19,11 @@ void Minecraft::start()
 }
 bool Minecraft::stop(int waitTimeoutSeconds)
 {
+#ifdef _WIN32
+    process_->terminate();
+#else
+    kill(process_->id(), SIGINT);
+#endif
     for (int i = 0; i != waitTimeoutSeconds; ++i)
     {
         std::cout << "Waiting for " << i << " seconds for minecraft to shutdown...\n";
