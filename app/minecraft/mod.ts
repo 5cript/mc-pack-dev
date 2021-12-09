@@ -8,6 +8,7 @@ type Mod = {
     installedTimestamp: string;
     newestTimestamp: string;
     latestFile: any;
+    error: boolean | undefined;
 }
 
 export {Mod};

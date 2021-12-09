@@ -187,35 +187,40 @@ class Home extends React.Component<HomeProps>
 		return split.join('.');
 	}
 
+	isCorrectVersion = (file: any, mcVersions: Array<string>, fabric: boolean) => {
+		const isFabric = file.minecraft_versions.find((version : string) => {
+			if (version.toLowerCase() === "fabric")
+				return true;
+			return false;
+		}) !== undefined;
+
+		const correctVersion = file.minecraft_versions.find((version : string) => {
+			for (let v in mcVersions)
+			{
+				if (!mcVersions[v].includes('.'))
+					continue;
+				if (mcVersions[v] === version)
+					return true;
+			}
+			for (let v in mcVersions)
+			{
+				if (!mcVersions[v].includes('.'))
+					continue;
+				if (this.simplifyVersion(mcVersions[v]) === this.simplifyVersion(version))
+					return true;
+			}
+			return false;
+		}) !== undefined;
+
+		return correctVersion && (isFabric === fabric);
+	}
+
 	loadModFromRemote = (id: number, mcVersions: Array<string>, fabric: boolean) =>
 	{
 		//console.log(mcVersions);
 		return Promise.all([curseforge.getMod(id), curseforge.getModFiles(id).then((modFiles: any) => {
 			modFiles = modFiles.filter((file: any) => {
-				const isFabric = file.minecraft_versions.find((version : string) => {
-					if (version.toLowerCase() === "fabric")
-						return true;
-					return false;
-				}) !== undefined;
-				const correctVersion = file.minecraft_versions.find((version : string) => {
-					for (let v in mcVersions)
-					{
-						if (!mcVersions[v].includes('.'))
-							continue;
-						if (mcVersions[v] === version)
-							return true;
-					}
-					for (let v in mcVersions)
-					{
-						if (!mcVersions[v].includes('.'))
-							continue;
-						if (this.simplifyVersion(mcVersions[v]) === this.simplifyVersion(version))
-							return true;
-					}
-					return false;
-				}) !== undefined;
-
-				return correctVersion && (isFabric === fabric);
+				return this.isCorrectVersion(file, mcVersions, fabric);				
 			})
 			modFiles.sort((lhs: {timestamp: string}, rhs: {timestamp: string}) => {
 				return moment(rhs.timestamp).isAfter(lhs.timestamp) ? 1 : -1;
@@ -227,11 +232,47 @@ class Home extends React.Component<HomeProps>
 	updateModList = async (mods: Array<Mod>, fabric: boolean) =>
 	{
 		const promises = mods.map((mod : Mod) => {
-			return this.loadModFromRemote(mod.id, mod.minecraftVersions.filter(elem => elem.toLowerCase() !== "fabric"), fabric).then(([_1, modFiles]) => {
+			const versions = mod.minecraftVersions.filter(elem => elem.toLowerCase() !== "fabric");
+
+			return this.loadModFromRemote(mod.id, versions, fabric).then(([freshMod, modFiles]) => {
 				modFiles = _.cloneDeep(modFiles);
-				if (modFiles.length === 0) {
+				if (modFiles.length === 0) 
+				{
+					console.log(freshMod);
+					if (freshMod.latestFiles !== undefined && freshMod.latestFiles.length > 0)
+					{
+						const filtered = freshMod.latestFiles.filter((file: any) => {
+							console.log({file, versions, fabric, isCorrect: this.isCorrectVersion(file, versions, fabric)});
+							return this.isCorrectVersion(file, versions, fabric);
+						});
+						if (filtered.length !== 0)
+						{
+							filtered.sort((lhs: {timestamp: string}, rhs: {timestamp: string}) => {
+								return moment(rhs.timestamp).isAfter(lhs.timestamp) ? 1 : -1;
+							})
+							mod.newestTimestamp = filtered[0].timestamp;
+							mod.latestFile = filtered[0];
+							return mod;
+						}
+					}
 					mod.newestTimestamp = '?';
-					return;
+					console.log(mod);
+					mod.latestFile = {
+						id: 0,
+						minecraft_versions: ['?'],
+						file_name: '?',
+						file_size: 0,
+						timestamp: '?',
+						release_type: '?',
+						download_url: '?',
+						downloads: null,
+						mod_dependencies: [],
+						alternate: false,
+						alternate_id: 0,
+						available: false
+					};
+					mod.error = true;
+					return mod;
 				}
 				mod.newestTimestamp = modFiles[0].timestamp;
 				mod.latestFile = modFiles[0];
@@ -293,6 +334,17 @@ class Home extends React.Component<HomeProps>
 		}
 	}
 
+	trimmedPackData = () => 
+	{
+		let pack = _.cloneDeep(this.state.pack);
+		pack.mods = pack.mods.map(mod => {
+			delete mod.newestTimestamp;
+			delete mod.latestFile;
+			return mod;
+		})
+		return pack;
+	}
+
 	savePack = () =>
 	{
 		if (!fs.existsSync(this.state.packInfo.directory))
@@ -301,14 +353,7 @@ class Home extends React.Component<HomeProps>
 		if (!fs.existsSync(this.state.packInfo.metaDir))
 			fs.mkdirSync(this.state.packInfo.metaDir);
 
-		let pack = _.cloneDeep(this.state.pack);
-		pack.mods = pack.mods.map(mod => {
-			delete mod.newestTimestamp;
-			delete mod.latestFile;
-			return mod;
-		})
-
-		fs.writeFileSync(pathTools.join(this.state.packInfo.metaDir, 'modpack.json'), JSON.stringify(pack, null, 4));
+		fs.writeFileSync(pathTools.join(this.state.packInfo.metaDir, 'modpack.json'), JSON.stringify(this.trimmedPackData(), null, 4));
 	}
 
 	componentDidMount = () =>
@@ -579,7 +624,9 @@ class Home extends React.Component<HomeProps>
 		})()
 	}
 
-	addModToPack = async (modFromApi: any) => {
+	addModToPack = async (modFromApi: any, latest: any) => {
+		console.log(modFromApi);
+
 		if (this.state.pack.mods.find(mod => mod.id === modFromApi.id) !== undefined)
 			return this.showMessageBox('Mod already in list', 'Ok', {});
 
@@ -601,22 +648,25 @@ class Home extends React.Component<HomeProps>
 			imageData = this.converterCanvas.toDataURL();
 		}
 
-		let [_1, modFiles] = await this.loadModFromRemote(modFromApi.id, [this.state.pack.minecraftVersion], this.state.pack.fabric);
-		modFiles = _.cloneDeep(modFiles);
-		if (modFiles.length === 0) {
-			this.showMessageBox('No file found for given Minecraft version.', 'Ok');
-			return;
+		if (latest === undefined) {
+			let [_1, modFiles] = await this.loadModFromRemote(modFromApi.id, [this.state.pack.minecraftVersion], this.state.pack.fabric);
+			modFiles = _.cloneDeep(modFiles);
+			if (modFiles.length === 0) {
+				this.showMessageBox('No file found for given Minecraft version.', 'Ok');
+				return;
+			}
+			latest = _.cloneDeep(modFiles[0])
 		}
 		const restructured : Mod = {
 			name: modFromApi.name,
 			id: modFromApi.id,
 			sid: modFromApi.key,
-			minecraftVersions: modFiles[0].minecraft_versions,
+			minecraftVersions: latest.minecraft_versions,
 			installedName: '',
 			installedTimestamp: '',
-			newestTimestamp: modFiles[0].timestamp,
+			newestTimestamp: latest.timestamp,
 			logoPng64: imageData,
-			latestFile: _.cloneDeep(modFiles[0])
+			latestFile:latest
 		};
 		pack.mods.push(restructured);
 		this.setState({pack: pack}, () => {
@@ -1033,11 +1083,11 @@ class Home extends React.Component<HomeProps>
 		archive.finalize();
 	}
 
-	onMessageBoxButton = (btn: string) =>
+	onMessageBoxButton = (btn: string, inputText: string) =>
 	{
 		const action = this.messageBoxActions[btn.toLowerCase()];
 		if (action !== undefined)
-			action();
+			action(inputText);
 		this.messageBoxActions = {};
 	}
 
@@ -1097,6 +1147,12 @@ class Home extends React.Component<HomeProps>
 
 		const lastSlash = mod.latestFile.download_url.lastIndexOf('/');
 		const fileName = mod.latestFile.download_url.substring(lastSlash + 1, mod.latestFile.download_url.length);
+
+		// mack modpack definition backup
+		const safeDate = (new Date()).toISOString().replaceAll(':','_');		
+		const backupDefinition = pathTools.join(this.state.packInfo.metaDir, 'modpack_' + safeDate + '.json');
+		console.log(backupDefinition);
+		fs.writeFileSync(backupDefinition, JSON.stringify(this.trimmedPackData(), null, 4));
 		
 		const oldName = _.clone(pack.mods[index].installedName);
 		pack.mods[index].installedName = fileName;
@@ -1114,6 +1170,40 @@ class Home extends React.Component<HomeProps>
 				this.miniDeploy();
 			})
 		})();
+	}
+
+	manualInstall = () => 
+	{
+		this.showMessageBox('Mod ID: ', 'Input', {
+			ok: (id) => {
+				curseforge.getMod(id).then((mod: any) => {
+					console.log(mod);
+					let str = '';
+					mod.latestFiles.map((file: any, index: number) => {
+						str += index + ": ";
+						str += file.minecraft_versions.reduce((lhs: string, rhs: string) => {
+							return lhs + ':' + rhs;
+						});
+						str += ' - ';
+						str += file.timestamp;
+						str += ' - ';
+						str += file.download_url.substring(file.download_url.lastIndexOf('/') + 1);
+						str += '\n';
+					})
+					this.showMessageBox('Pick One (invalid input is ignored):\n' + str, 'Input', {
+						ok: (num: number) => {
+							if (mod.latestFiles[num]) {
+								const selected = mod.latestFiles[num];
+								console.log(mod);
+								this.addModToPack(mod, selected);
+							}
+						}
+					})
+				});
+				console.log(id)
+			},
+			cancel: () => {}
+		})
 	}
 
 	render()
@@ -1142,9 +1232,9 @@ class Home extends React.Component<HomeProps>
 				<MessageBox
 					visible={this.state.messageBoxVisible}
 					message={this.state.messageBoxText}
-					onButtonPress={(btn: string) => {
+					onButtonPress={(btn: string, inputText: string) => {
 						this.setState({messageBoxVisible: false});
-						this.onMessageBoxButton(btn);
+						this.onMessageBoxButton(btn, inputText);
 					}}
 					boxStyle={this.state.messageBoxStyle}
 				>
@@ -1155,6 +1245,7 @@ class Home extends React.Component<HomeProps>
 					message={'Downloading...'}
 					onButtonPress={() => {}}
 					boxStyle={'Modal'}
+					disableResize={false}
 				>
 					<Line
 						percent={(() => {
@@ -1312,6 +1403,12 @@ class Home extends React.Component<HomeProps>
 								(Re)Install Mods
 							</StyledButton>
 							<StyledButton
+								onClick={this.manualInstall}
+								disabled={this.state.initialLoading}
+							>
+								Manual Install
+							</StyledButton>
+							<StyledButton
 								onClick={this.updateMods}
 								disabled={this.state.initialLoading}
 							>
@@ -1343,7 +1440,13 @@ class Home extends React.Component<HomeProps>
 								},
 								{
 									Header: 'Name',
-									accessor: 'name',
+									accessor: (mod: Mod) => {
+										return {
+											name: mod.name,
+											error: mod.error
+										};
+									},
+									id: 'name',
 									width: 200
 								},
 								{

@@ -66,6 +66,10 @@ const TableCell = ({
     {
         return <img src={value} alt="Red dot"/>
     }
+    else if (id === 'name')
+    {
+        return <div className={classNames(value.error ? styles.uninstalledMod : undefined, styles.cell)}>{value.name}</div>
+    }
     else if (id === 'installed_time')
     {   
         const timeClass = getTimeClass();

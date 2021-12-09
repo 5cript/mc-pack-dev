@@ -18,6 +18,7 @@ import styles from './MessageBox.css';
 class MessageBox extends React.Component
 {
     boxStyle : string;
+    inputValue: string;
 
     state = {
         rodalVisible: false,
@@ -46,7 +47,12 @@ class MessageBox extends React.Component
 
     onButtonClick(whatButton)
     {
-        this.props.onButtonPress(whatButton);
+        this.props.onButtonPress(whatButton, this.inputValue);
+    }
+
+    updateInputValue = (val: string) =>
+    {
+        this.inputValue = val.target.value;
     }
 
     render()
@@ -57,15 +63,15 @@ class MessageBox extends React.Component
             this.boxStyle = this.props.boxStyle
 
         return (
-            <ReactModal initWidth={this.props.width ? this.props.width : 500} initHeight={this.props.height ? this.props.height : 200} 
+            <ReactModal initWidth={this.props.width ? this.props.width : 650} initHeight={this.props.height ? this.props.height : 500} 
                 onFocus={() => {}}
                 className={styles.messageBoxModal}
                 onRequestClose={()=>{this.onRodalClose()}} 
                 isOpen={this.props.visible}
                 disableResize={this.props.disableResize}
                 disableMove={this.props.disableMove}
-                top={200}
-                left={400}
+                top={100}
+                left={200}
                 disableVerticalMove={true}
                 disableHorizontalMove={true}
             >
@@ -80,7 +86,16 @@ class MessageBox extends React.Component
                         display: this.props.disableInput === true ? 'none' : undefined
                     }}
                 >    
-                </TextareaAutosize >
+                </TextareaAutosize>
+                <div>
+                    {(()=>{
+                        if (this.boxStyle === "Input") 
+                        {
+                            return <input onChange={this.updateInputValue} style={{width: '400px', marginLeft: '10px', marginBottom: '5px'}}></input>
+                        }
+                        return <div/>;
+                    })()}
+                </div>
                 <div className={styles.messageBoxButtons}>
                     {(()=>{
                         if (this.boxStyle === "YesNo") 
@@ -100,7 +115,7 @@ class MessageBox extends React.Component
                                 </div>
                             )
                         }
-                        else if (this.boxStyle === "OkCancel") 
+                        else if (this.boxStyle === "OkCancel" || this.boxStyle === "Input") 
                         {
                             return (
                                 <div className={styles.buttonBox}>
