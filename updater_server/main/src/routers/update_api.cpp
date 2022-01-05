@@ -1,6 +1,6 @@
 #include "update_api.hpp"
+#include <updater_server/sha256.hpp>
 #include "router_base.hpp"
-#include "../sha256.hpp"
 #include "../temp_file.hpp"
 
 #include <attender/http/response.hpp>
@@ -73,6 +73,7 @@ void UpdateApi::addHttpEndpoints(attender::http_server& server)
         {
             return res->status(500).send("Cannot shutdown minecraft in time");
         }
+        agent_.backupWorld();
         auto content = std::make_shared <TempFile>("temp.tar");
         req->read_body(*content).then([content, res, this]() {
             content->close();
@@ -83,5 +84,16 @@ void UpdateApi::addHttpEndpoints(attender::http_server& server)
             minecraft_->start();
             res->end();
         });
+    });
+
+    server.get("/versions", [this](auto req, auto res) {
+        enable_cors(req, res);
+        /*
+        {
+            "fabricVersion": "0.12.12",
+            "minecraftVersion": "1.18.1",
+        }
+        */
+        res->status(200).type(".json").send_file(agent_.getFilePath("updater.json").string());
     });
 }

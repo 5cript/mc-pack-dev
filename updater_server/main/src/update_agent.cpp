@@ -1,5 +1,5 @@
 #include "update_agent.hpp"
-#include "update_server/sha256.hpp"
+#include <updater_server/sha256.hpp>
 
 #include <fmt/ranges.h>
 #include <star-tape/star_tape.hpp>
@@ -10,6 +10,8 @@
 #include <set>
 #include <iostream>
 #include <fstream>
+
+using namespace std::string_literals;
 
 namespace 
 {
@@ -57,6 +59,25 @@ void UpdateAgent::loadLocalMods()
 std::filesystem::path UpdateAgent::getModPath(std::string const& name)
 {
     return getBasePath(selfDirectory_) / modsDirName / name;
+}
+//---------------------------------------------------------------------------------------------------------------------
+std::filesystem::path UpdateAgent::getFilePath(std::string const& name)
+{
+    return getBasePath(selfDirectory_) / name;
+}
+//---------------------------------------------------------------------------------------------------------------------
+void UpdateAgent::backupWorld()
+{
+    for (int i = 1; i != 1000; ++i)
+    {
+        std::filesystem::path worldBackup{getBasePath(selfDirectory_) / ("world_"s + std::to_string(i))};
+        if (!std::filesystem::exists(worldBackup))
+        {
+            std::cout << "Creating World Backup " << worldBackup.filename().string() << "\n";
+            std::filesystem::copy(getBasePath(selfDirectory_) / "world", worldBackup, std::filesystem::copy_options::recursive);
+            break;
+        }
+    }
 }
 //---------------------------------------------------------------------------------------------------------------------
 bool UpdateAgent::installMods(std::string const& tarFile)

@@ -23,7 +23,9 @@ public:
 
     UpdateInstructions buildDifference(std::vector <UpdateFile> const& remoteFiles);
     std::filesystem::path getModPath(std::string const& name);
+    std::filesystem::path getFilePath(std::string const& name);
     bool installMods(std::string const& tarFile);
+    void backupWorld();
 
 private:
     void loadLocalMods();
