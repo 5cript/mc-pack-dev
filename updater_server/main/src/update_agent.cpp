@@ -1,5 +1,5 @@
 #include "update_agent.hpp"
-#include "sha256.hpp"
+#include "update_server/sha256.hpp"
 
 #include <fmt/ranges.h>
 #include <star-tape/star_tape.hpp>
@@ -45,9 +45,7 @@ void UpdateAgent::loadLocalMods()
 
         localMods_.clear();
         for (; mods != end; ++mods)
-        {
             localMods_.push_back(mods->path());
-        }
     }
     catch(const std::exception& e)
     {

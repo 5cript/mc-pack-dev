@@ -5,6 +5,7 @@
 #include <filesystem>
 #include <fstream>
 #include <cstring>
+#include <sstream>
 
 [[maybe_unused]] static std::string sha256FromFile(std::filesystem::path const& source)
 {
