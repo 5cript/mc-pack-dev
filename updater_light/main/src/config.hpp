@@ -9,11 +9,12 @@ struct Config
 {
     std::set<std::string> ignoreMods = {};
     std::string updateServerIp = "";
-    unsigned short port = 25002;
+    unsigned short updateServerPort = 25002;
     std::string fabricVersion = "";
     std::string minecraftVersion = "";
 };
 
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(Config, ignoreMods, updateServerIp, port)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(Config, ignoreMods, updateServerIp, updateServerPort, fabricVersion, minecraftVersion)
 
 Config loadConfig(std::filesystem::path const& selfDirectory);
+void saveConfig(std::filesystem::path const& selfDirectory, Config const& config);

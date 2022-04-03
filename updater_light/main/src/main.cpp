@@ -1,9 +1,11 @@
 #include "update_client.hpp"
 #include "config.hpp"
+#include "base_path.hpp"
 
 #include <ftxui/dom/elements.hpp>
 #include <ftxui/screen/screen.hpp>
 #include <ftxui/screen/string.hpp>
+#include <boost/process.hpp>
 
 #include <iostream>
 #include <thread>
@@ -20,10 +22,15 @@ int main(int argc, char** argv)
     auto config = loadConfig(selfPath);
  
     std::string resetPosition;
-    UpdateClient client{selfPath, config.updateServerIp, config.port};
+    UpdateClient client{selfPath, config.updateServerIp, config.updateServerPort};
     client.performUpdate(
         config,
         {
+            .onFabricInstall = []()
+            {
+                std::cout << "Fabric loader or Minecraft version differs. Will now proceed to install fabric!\n";
+                return true;
+            },
             .onDownloadProgress = [&resetPosition](int current, int total, std::string const& currentName)
             {
                 const auto progress = total == 0 ? 1 : static_cast <double>(current) / (total == 0 ? 1 : total);
@@ -45,6 +52,12 @@ int main(int argc, char** argv)
             }
         }
     );
+    std::cout << std::endl << "Starting Minecraft\n";
 
-    std::cout << std::endl;
+    boost::process::child minecraft{      
+        "\"" + (getBasePath(selfPath) / clientDirectory / "Minecraft.exe").string() + "\" --workDir \"" + (getBasePath(selfPath) / clientDirectory).string() + "\"",
+        boost::process::std_out > stdout, 
+        boost::process::std_err > stderr,
+    };
+    minecraft.wait();
 }

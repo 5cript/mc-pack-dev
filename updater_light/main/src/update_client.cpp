@@ -5,10 +5,17 @@
 #include <attendee/sources/string_source.hpp>
 #include <nlohmann/json.hpp>
 
+#include <boost/property_tree/ptree.hpp>
+#include <boost/property_tree/xml_parser.hpp>
+#include <boost/process.hpp>
+
 #include <iostream>
+#include <sstream>
+#include <chrono>
 
 using json = nlohmann::json;
 using namespace std::string_literals;
+using namespace std::chrono_literals;
 
 UpdateClient::UpdateClient(std::filesystem::path selfDirectory, std::string remoteAddress, unsigned short port)
     : selfDirectory_{std::move(selfDirectory)}
@@ -21,12 +28,128 @@ void UpdateClient::performUpdate(Config const& conf, ProgressCallbacks const& cb
 {
     conf_ = conf;
     cbs_ = cbs;
+
+    installFabric();
     updateMods();
 }
 
-void UpdateClient::installFabric() const
+void UpdateClient::installFabric()
 {
-    
+    attendee::request req;
+    std::string response;
+    req
+        .sink(response)
+        .get(url("/versions"))
+        .perform()
+    ;
+    Versions versions;
+    json::parse(response).get_to(versions);
+
+    if ((versions.fabricVersion != conf_.fabricVersion || versions.minecraftVersion != conf_.minecraftVersion) && cbs_.onFabricInstall())
+    {
+        const auto clientDir = getBasePath(selfDirectory_) / clientDirectory;
+
+        std::string metadata;
+        attendee::request req2;
+        if (int res = req2
+            .sink(metadata)
+            .verify_peer(false)
+            .get("https://maven.fabricmc.net/net/fabricmc/fabric-installer/maven-metadata.xml")
+            .perform()
+            .result(); res != 0
+        ){
+            std::cout << "Could not load fabric installer version metadata " << res <<"\n";
+            return;
+        }
+
+        namespace pt = boost::property_tree;
+        pt::ptree tree;
+        std::stringstream metadataStream{metadata};
+        pt::read_xml(metadataStream, tree);
+        const auto latestInstallerVersion = tree.get<std::string>("metadata.versioning.latest");
+        std::cout << "Download latest installer " << tree.get<std::string>("metadata.versioning.latest") << "\n";
+
+        const auto installerFile = clientDir / "installer.jar";
+        std::ofstream writer{installerFile, std::ios_base::binary};
+        attendee::request reqInst;
+        if (int res = reqInst
+            .sink([&writer](auto const* buf, std::size_t amount){
+                writer.write(buf, amount);
+            })
+            .verify_peer(false)
+            .get("https://maven.fabricmc.net/net/fabricmc/fabric-installer/" + latestInstallerVersion + "/fabric-installer-" + latestInstallerVersion + ".jar")
+            .perform()
+            .result(); res != 0)
+        {
+            std::cout << "Could not download fabric installer " << res << "\n";
+            return;
+        }
+        writer.close();
+
+        auto javaPath = findJava();
+        if (!javaPath)
+            return;
+        std::cout << "Calling fabric installer into " << clientDir.string() << "\n";
+        const auto invocation =
+            javaPath->string() 
+                + " -jar \"" 
+                + installerFile.string() 
+                + "\" client -mcversion " 
+                + versions.minecraftVersion 
+                + " -dir \""
+                + clientDir.string()
+                + "\" -downloadMinecraft"
+                + " -loader "
+                + versions.fabricVersion
+        ;
+
+        boost::process::child installer{      
+            invocation,
+            boost::process::std_out > stdout, 
+            boost::process::std_err > stderr,
+        };
+        installer.wait_for(30s);
+        conf_.minecraftVersion = versions.minecraftVersion;
+        conf_.fabricVersion = versions.fabricVersion;
+        saveConfig(selfDirectory_, conf_);
+    }
+    else 
+    {
+        std::cout << "Fabric and Minecraft installation are up to date\n";
+    }
+}
+
+std::optional<std::filesystem::path> UpdateClient::findJava() const
+{
+    const auto clientDir = getBasePath(selfDirectory_) / clientDirectory;
+    auto path = clientDir / "runtime";
+    if (!std::filesystem::exists(path))
+    {
+        std::cout << "Runtime is not installed. Please start minecraft launcher once here.\n";
+        return std::nullopt;
+    }
+    // decends further into the first found directory:
+    path = std::filesystem::directory_iterator{path}->path();
+    path = std::filesystem::directory_iterator{path}->path();
+    std::filesystem::directory_iterator anyIter{path}, end;
+    for (; anyIter != end; ++anyIter)
+    {
+        if (std::filesystem::is_directory(anyIter->status()))
+        {
+            path = anyIter->path();
+            break;
+        }
+    }
+    if (anyIter == end)
+    {
+        std::cout << "Could not decend into runtime directory structure.\n";
+        return std::nullopt;
+    }
+    if (std::filesystem::exists(path / "bin" / "java.exe"))
+        path = path / "bin" / "java.exe";
+    else
+        path = path / "bin" / "java";
+    return path;
 }
 
 void UpdateClient::updateMods()

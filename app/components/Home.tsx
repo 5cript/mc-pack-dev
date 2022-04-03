@@ -584,7 +584,10 @@ class Home extends React.Component<HomeProps>
 				return (async () => {
 					return scraper.downloadFabricInstaller().then(buffer => {
 						const fabricInstaller = pathTools.join(packDir, "fabric-installer.jar");
-						return fsPromise.writeFile(fabricInstaller, Buffer.from(buffer));
+						return Promise.all([
+							fsPromise.writeFile(fabricInstaller, Buffer.from(buffer)),
+							fsPromise.writeFile(pathTools.join(packDir, "server", "fabric-installer.jar"), Buffer.from(buffer))
+						]);
 					});
 				})();
 			},
@@ -604,6 +607,20 @@ class Home extends React.Component<HomeProps>
 			// Create run.bat
 			() => {
 				return fsPromise.writeFile(pathTools.join(packDir, "run.bat"), "set WORKDIR=%cd%\\client\nstart \"\" \"client/Minecraft.exe\" --workDir \"%WORKDIR%\"")
+			},
+			// Create reinstall.sh
+			() => {
+				return fsPromise.writeFile(pathTools.join(packDir, "server", "reinstall.sh"), 
+					`
+					#!/bin/bash
+
+					MCVERSION=${this.state.pack.minecraftVersion}
+					FABRIC=
+					
+					java -jar fabric-installer.jar server -mcversion $MCVERSION -dir . -downloadMinecraft -loader $FABRIC
+					echo "{\"fabricVersion\": \"$FABRIC\", \"minecraftVersion\": \"$MCVERSION\"}" > updater.json
+					`
+				)
 			},
 			// Modify launcher_profiles
 			() => {
@@ -1032,30 +1049,38 @@ class Home extends React.Component<HomeProps>
 				return JSON.stringify({
 					ignoreMods: [],
 					updateServerIp: server?.ipAddr,
-					updateServerPort: server?.port
+					updateServerPort: server?.port,
+					fabricVersion: "",
+					minecraftVersion: ""
 				})
 			})());
 		}
 
 		createDirInDest("client");
-		const updaterDevPath = pathTools.join(process.cwd(), 'updater_ui', 'release', 'build', 'win-unpacked')
+		createDirInDest("server");
+		//const updaterDevPath = pathTools.join(process.cwd(), 'updater_ui', 'release', 'build', 'win-unpacked')
+		const updaterDevPath = pathTools.join(process.cwd(), 'updater_light', 'release', 'bin');
 		if (server && fs.existsSync(pathTools.join(process.cwd(), 'updater'))) {
 			createUpdater(pathTools.join(process.cwd(), 'updater'));
 		} else if (server && fs.existsSync(updaterDevPath)) {
 			createUpdater(updaterDevPath);
 		}
 		else {
-			copyOver("run.bat");
 			copyOver("client", "mods");
 		}
+		copyOver("run.bat");
 		copyOver("mcpackdev");
 		copyOver("client", "config");
 		copyOver("client", "libraries");
-		copyOver("client", "scripts");
-		copyOver("client", "versions");
+		if (!this.state.pack.fabric)
+			copyOver("client", "scripts");
+		//copyOver("client", "versions");
 		copyOver("client", "shaderpacks");
 		copyOver("client", "resourcepacks");
 		copyOver("client", "Minecraft.exe");
+
+		copyOver("server", "fabric-installer.jar");
+		copyOver("server", "reinstall.sh");
 
 		// copies relevant part of launcher profiles
 		let profs = new LauncherProfiles();
@@ -1064,8 +1089,12 @@ class Home extends React.Component<HomeProps>
 			pathTools.join(currentDeploymentDest, "client", "launcher_profiles.json"), 
 			JSON.stringify(profs.getObject(), null, 4)
 		);
+		this.setState({
+			messageBoxVisible: false
+		})
 
 		// make zip
+		/*
 		const archiveStream = fs.createWriteStream(pathTools.join(this.state.packInfo.directory, "deployments", dateTime + ".zip"));
 		const archive = archiver('zip', {zlib: {level: 9}});
 
@@ -1081,6 +1110,7 @@ class Home extends React.Component<HomeProps>
 		archive.pipe(archiveStream);
 		archive.directory(currentDeploymentDest, false);
 		archive.finalize();
+		*/
 	}
 
 	onMessageBoxButton = (btn: string, inputText: string) =>
@@ -1485,6 +1515,8 @@ class Home extends React.Component<HomeProps>
 								{
 									Header: 'Version',
 									accessor: (mod: Mod) => {
+										if (!mod.latestFile)
+											return 'ERROR!';
 										return JSON.stringify(mod.latestFile.minecraft_versions);
 									},
 									id: 'version'

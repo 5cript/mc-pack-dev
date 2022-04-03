@@ -9,6 +9,7 @@
 #include <filesystem>
 #include <vector>
 #include <functional>
+#include <optional>
 
 struct HashedMod
 {
@@ -23,14 +24,22 @@ struct UpdateInstructions
     std::vector <std::string> remove;
 };
 
+struct Versions
+{
+    std::string fabricVersion;
+    std::string minecraftVersion;
+};
+
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(HashedMod, name, hash)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(UpdateInstructions, download, remove)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(Versions, fabricVersion, minecraftVersion)
 
 class UpdateClient
 {
 public:
     struct ProgressCallbacks
     {
+        std::function<bool()> onFabricInstall;
         std::function<void(int, int, std::string const&)> onDownloadProgress;
     };
 
@@ -44,7 +53,8 @@ private:
     std::vector <HashedMod> loadLocalMods();
     void removeOldMods(std::vector <std::string> const& removalList);
     void downloadMods(std::vector <std::string> const& downloadList);
-    void installFabric() const;
+    void installFabric();
+    std::optional<std::filesystem::path> findJava() const;
 
 private:
     Config conf_;
