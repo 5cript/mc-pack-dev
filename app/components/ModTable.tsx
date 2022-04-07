@@ -14,7 +14,8 @@ const TableCell = ({
     column: { id },
     updateMyData, // This is a custom function that we supplied to our table instance
     removeData,
-    onInstallClick
+    onInstallClick,
+    onInstallSpecificClick
 }) => {
     // We need to keep and update the state of the cell normally
     const [value, setValue] = React.useState(initialValue)
@@ -47,7 +48,9 @@ const TableCell = ({
     const getTimeClass = () => 
     {
         let timeClass = styles.uninstalledMod;
-        if (value.installed === "" || value.newest === "?" || value.installed === "?")
+        if (value.manualInstall)
+            timeClass = styles.manualInstalledMod;
+        else if (value.installed === "" || value.newest === "?" || value.installed === "?")
             timeClass = styles.uninstalledMod;
         else if (moment(value.newest).isAfter(value.installed))
             timeClass = styles.outOfDateMod;
@@ -68,7 +71,15 @@ const TableCell = ({
     }
     else if (id === 'name')
     {
-        return <div className={classNames(value.error ? styles.uninstalledMod : undefined, styles.cell)}>{value.name}</div>
+        let className = undefined;
+        if (value.error)
+        {
+            if (value.manualInstall !== undefined)
+                className = styles.manualInstalledMod;
+            else
+                className = styles.uninstalledMod;
+        }
+        return <div className={classNames(className, styles.cell)}>{value.name}</div>
     }
     else if (id === 'installed_time')
     {   
@@ -76,34 +87,40 @@ const TableCell = ({
 
         if (value === undefined)
             return <div className={styles.cell}>?</div>
-        // onClick={() => {onInstallClick(index)}}
         return <div className={classNames(timeClass, styles.cell)} onClick={() => {onInstallClick(index)}} style={{cursor: "pointer"}}>
             {moment(value.installed).format("D. MMM YYYY - HH:mm:ss")}
         </div>
     }
     else if (id === 'newest_time')
     {
-        //console.log(value);
         if (value === undefined || value === "?")
             return <div className={styles.cell}>?</div>
 
         const timeClass = getTimeClass();
 
+        let date = moment(value.newest).format("D. MMM YYYY - HH:mm:ss");
+        if (value.manualInstall)
+            date = moment(value.manualInstall.newestTimestamp).format("D. MMM YYYY - HH:mm:ss") + "? [MANUAL INSTALL]";
+
         return <div 
             className={classNames(timeClass, styles.cell)}>
-            {moment(value.newest).format("D. MMM YYYY - HH:mm:ss")}
+            {date}
         </div>
     }
     else if (id === 'version')
     {
-        return <div style={{width:'100%'}}>{value}</div>
+        if (value === undefined)
+            return <div className={styles.cell}>?</div>
+        return <div onClick={() => {onInstallSpecificClick(index)}} style={{cursor: "pointer", width:'100%'}}>
+            {value}
+        </div>
     }
     else
         return <div className={styles.cell}>{value}</div>
         
 }
 
-function Table({columns, data, updateMyData, removeData, addLine, onInstallClick}) {
+function Table({columns, data, updateMyData, removeData, addLine, onInstallClick, onInstallSpecificClick}) {
     const defaultColumn = React.useMemo(
         () => ({
             minWidth: 5,
@@ -128,7 +145,8 @@ function Table({columns, data, updateMyData, removeData, addLine, onInstallClick
         updateMyData,
         removeData,
         addLine,
-        onInstallClick
+        onInstallClick,
+        onInstallSpecificClick
     },
         useBlockLayout,
         hooks => {
@@ -242,6 +260,7 @@ class ModTable extends React.Component
                 removeData={(...args) => {this.removeData(...args)}}
                 addLine={this.addLine}
                 onInstallClick={(...args) => {this.props.onInstallClick(...args)}}
+                onInstallSpecificClick={(...args) => {this.props.onInstallSpecificClick(...args)}}
             />
         );
     }

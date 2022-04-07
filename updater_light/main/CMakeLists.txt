@@ -32,11 +32,7 @@ if (UNIX)
     target_link_libraries(${PROJECT_NAME} PUBLIC pthread atomic)
 endif (UNIX)
 
-if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
-  target_link_libraries(${PROJECT_NAME} PUBLIC "libc++")
-else()
-  target_link_libraries(${PROJECT_NAME} PUBLIC "-lstdc++ -lgcc")
-endif()
+target_link_libraries(${PROJECT_NAME} PUBLIC "-lstdc++ -lgcc")
 
 add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
   COMMAND bash -c "ldd $<TARGET_FILE:${PROJECT_NAME}>" | "grep" "clang" | awk "NF == 4 { system(\"cp \" \$3 \" $<TARGET_FILE_DIR:${PROJECT_NAME}>\") }"

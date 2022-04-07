@@ -37,13 +37,28 @@ void UpdateClient::installFabric()
 {
     attendee::request req;
     std::string response;
-    req
+    const auto res = req
         .sink(response)
         .get(url("/versions"))
         .perform()
     ;
     Versions versions;
-    json::parse(response).get_to(versions);
+    if (res.code() != 200) 
+    {
+        std::cout << "Could not connect to update server.\n";
+        std::cin.get();
+        throw std::runtime_error("Connection failed");
+    }
+    try 
+    {
+        json::parse(response).get_to(versions);
+    }
+    catch(std::exception const& exc)
+    {
+        std::cout << "Could not parse versions response: " << exc.what() << "\n";
+        std::cout << response << "\n";
+        std::rethrow_exception(std::current_exception());
+    }
 
     if ((versions.fabricVersion != conf_.fabricVersion || versions.minecraftVersion != conf_.minecraftVersion) && cbs_.onFabricInstall())
     {
@@ -156,17 +171,28 @@ void UpdateClient::updateMods()
 {
     attendee::request req;
     std::string response;
+    std::cout << "Getting minecraft mod file list...\n";
     req
         .set_header_fields({
             {"Expect", ""}
         })
-        .make_source<attendee::string_source>(json{{"mods",  loadLocalMods()}}.dump())
+        .make_source<attendee::string_source>(json{{"mods", loadLocalMods()}}.dump())
         .post(url("/make_file_difference"), false)
         .sink(response)
         .perform()
     ;
-    UpdateInstructions instructions;
-    json::parse(response).get_to(instructions);
+    std::cout << "List was obtained.\n";
+    UpdateInstructions instructions;    
+    try 
+    {
+        json::parse(response).get_to(instructions);
+    }
+    catch(std::exception const& exc)
+    {
+        std::cout << "Could not parse make_file_difference response: " << exc.what() << "\n";
+        std::cout << response << "\n";
+        std::rethrow_exception(std::current_exception());
+    }
 
     removeOldMods(instructions.remove);
     downloadMods(instructions.download);

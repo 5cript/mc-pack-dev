@@ -1,4 +1,4 @@
-type Mod = {
+type ModData = {
     name: string;
     id: number;
     sid: string;
@@ -9,6 +9,7 @@ type Mod = {
     newestTimestamp: string;
     latestFile: any;
     error: boolean | undefined;
+    manualInstall: ModData | undefined;
 }
 
-export {Mod};
+export default ModData;

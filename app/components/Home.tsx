@@ -9,16 +9,20 @@ import moment from 'moment';
 import tar from 'tar';
 import MenuItem from '@material-ui/core/MenuItem';
 import InputLabel from '@material-ui/core/InputLabel';
+import FormGroup from '@material-ui/core/FormGroup';
+import FormControlLabel from '@material-ui/core/FormControlLabel';
+import Switch from '@material-ui/core/Switch';
 import { Line } from 'rc-progress';
 
 import ModTable from './ModTable';
-import {Mod} from '../minecraft/mod';
+import ModData from '../minecraft/moddata';
+import {CurseApi, CurseMod} from '../minecraft/apiwrap';
 import StyledButton, {SlimButton} from './button';
 import FormControl from '@material-ui/core/FormControl';
 import Select from '@material-ui/core/Select';
 import ForgeScrape from '../minecraft/forge';
 import FabricScrape from '../minecraft/fabric';
-import { styled, ThemeProvider, createMuiTheme, withStyles } from '@material-ui/core/styles';
+import { styled, ThemeProvider, createTheme, withStyles } from '@material-ui/core/styles';
 import LauncherProfiles from '../minecraft/launcher_profiles';
 import ReactModal from 'react-modal-resizable-draggable';
 
@@ -66,7 +70,7 @@ const StyledForm = styled(FormControl)({
 	minWidth: 240,
 })
 
-const theme = createMuiTheme({
+const theme = createTheme({
 	palette: {
 		primary: {
 			main: '#43b14c'
@@ -89,7 +93,7 @@ type HomeState = {
 	lastQuery: Array<any>,
 	modSearchValue: string,
 	pack: {
-		mods: Array<Mod>,
+		mods: Array<ModData>,
 		minecraftVersion: string,
 		fabric: boolean
 	},
@@ -104,7 +108,8 @@ type HomeState = {
 	installProgress: number,
 	installTotal: number,
 	initialLoading: boolean,
-	selectedServer: string
+	selectedServer: string,
+	permissiveModMatch: boolean
 }
 type MessageBoxActions = {
 	yes: Function | undefined,
@@ -145,15 +150,19 @@ class Home extends React.Component<HomeProps>
 		installProgress: 0,
 		installTotal: 0,
 		initialLoading: true,
-		selectedServer: ''
+		selectedServer: '',
+		permissiveModMatch: false,
 	};
 	messageBoxActions: MessageBoxActions = {yes: ()=>{}, no: ()=>{}, ok: ()=>{}};
 	throttledFetch: Function;
 	servers: Array<ServerSettings>;
+	curse: CurseApi;
 
 	constructor(props : HomeProps)
 	{
 		super(props);
+
+		this.curse = new CurseApi(true);
 		this.forgeVersion = "";
 		this.servers = [];
 
@@ -187,76 +196,13 @@ class Home extends React.Component<HomeProps>
 		return split.join('.');
 	}
 
-	isCorrectVersion = (file: any, mcVersions: Array<string>, fabric: boolean) => {
-		const isFabric = file.minecraft_versions.find((version : string) => {
-			if (version.toLowerCase() === "fabric")
-				return true;
-			return false;
-		}) !== undefined;
-
-		const correctVersion = file.minecraft_versions.find((version : string) => {
-			for (let v in mcVersions)
-			{
-				if (!mcVersions[v].includes('.'))
-					continue;
-				if (mcVersions[v] === version)
-					return true;
-			}
-			for (let v in mcVersions)
-			{
-				if (!mcVersions[v].includes('.'))
-					continue;
-				if (this.simplifyVersion(mcVersions[v]) === this.simplifyVersion(version))
-					return true;
-			}
-			return false;
-		}) !== undefined;
-
-		return correctVersion && (isFabric === fabric);
-	}
-
-	loadModFromRemote = (id: number, mcVersions: Array<string>, fabric: boolean) =>
+	updateModList = async (mods: Array<ModData>, versions: Array<string>) =>
 	{
-		//console.log(mcVersions);
-		return Promise.all([curseforge.getMod(id), curseforge.getModFiles(id).then((modFiles: any) => {
-			modFiles = modFiles.filter((file: any) => {
-				return this.isCorrectVersion(file, mcVersions, fabric);				
-			})
-			modFiles.sort((lhs: {timestamp: string}, rhs: {timestamp: string}) => {
-				return moment(rhs.timestamp).isAfter(lhs.timestamp) ? 1 : -1;
-			})
-			return modFiles;
-		})]);
-	}
-
-	updateModList = async (mods: Array<Mod>, fabric: boolean) =>
-	{
-		const promises = mods.map((mod : Mod) => {
-			const versions = mod.minecraftVersions.filter(elem => elem.toLowerCase() !== "fabric");
-
-			return this.loadModFromRemote(mod.id, versions, fabric).then(([freshMod, modFiles]) => {
-				modFiles = _.cloneDeep(modFiles);
-				if (modFiles.length === 0) 
-				{
-					console.log(freshMod);
-					if (freshMod.latestFiles !== undefined && freshMod.latestFiles.length > 0)
-					{
-						const filtered = freshMod.latestFiles.filter((file: any) => {
-							console.log({file, versions, fabric, isCorrect: this.isCorrectVersion(file, versions, fabric)});
-							return this.isCorrectVersion(file, versions, fabric);
-						});
-						if (filtered.length !== 0)
-						{
-							filtered.sort((lhs: {timestamp: string}, rhs: {timestamp: string}) => {
-								return moment(rhs.timestamp).isAfter(lhs.timestamp) ? 1 : -1;
-							})
-							mod.newestTimestamp = filtered[0].timestamp;
-							mod.latestFile = filtered[0];
-							return mod;
-						}
-					}
+		const promises = mods.map((mod : ModData) => {
+			return this.curse.getMod(mod.id).then((freshMod: CurseMod) => {
+				const modFiles = freshMod.getCompatibleFiles(versions, this.state.permissiveModMatch);
+				if (modFiles.length === 0) {
 					mod.newestTimestamp = '?';
-					console.log(mod);
 					mod.latestFile = {
 						id: 0,
 						minecraft_versions: ['?'],
@@ -289,6 +235,19 @@ class Home extends React.Component<HomeProps>
 		packInfo.metaDir = pathTools.join(dir, 'mcpackdev');
 		let pack = _.clone(this.state.pack);
 
+		if (!fs.existsSync(dir))
+		{
+			if (this.mounted) {
+				this.setState({
+					initialLoading: false
+				});
+			} else {
+				this.state.initialLoading = false;
+			}
+			this.showMessageBox('Directory does not exist. Opening Pack failed.', 'Ok');
+			return;
+		}
+
 		if (!fs.existsSync(packInfo.metaDir))
 			fs.mkdirSync(packInfo.metaDir);
 
@@ -298,7 +257,8 @@ class Home extends React.Component<HomeProps>
 			{
 				const packParsed = JSON.parse(fs.readFileSync(pathTools.join(packInfo.metaDir, 'modpack.json')));
 				pack = packParsed;
-				pack.mods = await this.updateModList(packParsed.mods, packParsed.fabric);
+				this.curse = new CurseApi(packParsed.fabric);
+				pack.mods = await this.updateModList(packParsed.mods, [packParsed.minecraftVersion]);
 				this.setState({
 					initialLoading: false
 				});
@@ -349,6 +309,8 @@ class Home extends React.Component<HomeProps>
 	{
 		if (!fs.existsSync(this.state.packInfo.directory))
 			return;
+
+		this.curse = new CurseApi(this.state.pack.fabric);
 		
 		if (!fs.existsSync(this.state.packInfo.metaDir))
 			fs.mkdirSync(this.state.packInfo.metaDir);
@@ -371,9 +333,11 @@ class Home extends React.Component<HomeProps>
 			const content = JSON.parse(contentStr);
 			this.servers = content.servers ? content.servers : [];
 			if (this.mounted)
-				this.setState({selectedServer: content.selectedServer})
-			else
-				this.state.selectedServer = content.selectedServer
+				this.setState({selectedServer: content.selectedServer, permissiveModMatch: content.permissiveModMatch})
+			else {
+				this.state.selectedServer = content.selectedServer;
+				this.state.permissiveModMatch = content.permissiveModMatch;
+			}
 
 			this.openPack(content.lastOpened);
 		}
@@ -395,13 +359,13 @@ class Home extends React.Component<HomeProps>
 		fs.writeFileSync(persistence, JSON.stringify({
 			lastOpened: this.state.packInfo.directory,
 			servers: this.servers,
-			selectedServer: this.state.selectedServer
-		}))
+			selectedServer: this.state.selectedServer,
+			permissiveModMatch: this.state.permissiveModMatch
+		}, null, 2))
 	}
 
 	showMessageBox = (message : string, type : string, actions: MessageBoxActions = {}) => 
 	{
-		console.log(actions);
 		this.messageBoxActions = actions;
 		if (this.mounted)
 			this.setState({
@@ -641,11 +605,15 @@ class Home extends React.Component<HomeProps>
 		})()
 	}
 
-	addModToPack = async (modFromApi: any, latest: any) => {
+	addModToPack = async (modFromApi: any, latest: any, ignoreDuplicate?: boolean) => {
 		console.log(modFromApi);
 
-		if (this.state.pack.mods.find(mod => mod.id === modFromApi.id) !== undefined)
-			return this.showMessageBox('Mod already in list', 'Ok', {});
+		if (ignoreDuplicate === undefined || ignoreDuplicate === null)
+			ignoreDuplicate = false;
+
+		const isDuplicate = this.state.pack.mods.find(mod => mod.id === modFromApi.id) !== undefined;
+		if (isDuplicate && ignoreDuplicate === false)
+			return this.showMessageBox('ModData already in list', 'Ok', {});
 
 		const pack = _.clone(this.state.pack);
 
@@ -666,15 +634,14 @@ class Home extends React.Component<HomeProps>
 		}
 
 		if (latest === undefined) {
-			let [_1, modFiles] = await this.loadModFromRemote(modFromApi.id, [this.state.pack.minecraftVersion], this.state.pack.fabric);
-			modFiles = _.cloneDeep(modFiles);
+			const modFiles = (await this.curse.getMod(modFromApi.id)).getCompatibleFiles([this.state.pack.minecraftVersion], this.state.permissiveModMatch);
 			if (modFiles.length === 0) {
 				this.showMessageBox('No file found for given Minecraft version.', 'Ok');
 				return;
 			}
 			latest = _.cloneDeep(modFiles[0])
 		}
-		const restructured : Mod = {
+		const restructured : ModData = {
 			name: modFromApi.name,
 			id: modFromApi.id,
 			sid: modFromApi.key,
@@ -683,11 +650,26 @@ class Home extends React.Component<HomeProps>
 			installedTimestamp: '',
 			newestTimestamp: latest.timestamp,
 			logoPng64: imageData,
-			latestFile:latest
+			latestFile:latest,
+			error: false,
+			manualInstall: undefined
 		};
-		pack.mods.push(restructured);
-		this.setState({pack: pack}, () => {
-			this.savePack();
+		if (isDuplicate && ignoreDuplicate)
+		{
+			restructured.manualInstall = _.cloneDeep(restructured);
+		}
+
+		if (isDuplicate) {
+			pack.mods[this.getModIndex(modFromApi.id)] = restructured;
+		}
+		else {
+			pack.mods.push(restructured);
+		}
+		return new Promise((resolve, reject) => {
+			this.setState({pack: pack}, () => {
+				this.savePack();
+				resolve(restructured);
+			});
 		});
 	}
 
@@ -751,7 +733,7 @@ class Home extends React.Component<HomeProps>
 	getModList = () => 
 	{
 		console.log(this.state.pack);
-		const res = this.state.pack.mods.sort((lhs: Mod, rhs: Mod) => {
+		const res = this.state.pack.mods.sort((lhs: ModData, rhs: ModData) => {
 			return lhs.name.localeCompare(rhs.name);
 		});
 		return res;
@@ -760,8 +742,12 @@ class Home extends React.Component<HomeProps>
 	sortedToReal = (index: number) => 
 	{
 		const sorted = this.getModList();
-		return this.state.pack.mods.findIndex((mod: Mod) => {
-			return (mod.id === sorted[index].id);
+		return this.getModIndex(sorted[index].id);
+	}
+
+	getModIndex = (id: number) => {
+		return this.state.pack.mods.findIndex((mod: ModData) => {
+			return (mod.id === id);
 		})
 	}
 
@@ -817,7 +803,7 @@ class Home extends React.Component<HomeProps>
 	installSingle = async (downloadUrl: string, fileName: string) => 
 	{
 		const result = pathTools.join(this.state.packInfo.directory, 'client', 'mods', fileName);
-		console.log(result);
+		console.log('Installing to:', result);
 		return fetch(downloadUrl).then(response => {
 			return response.arrayBuffer().then(buffer => {
 				return fsPromise.writeFile(result, Buffer.from(buffer))
@@ -828,7 +814,7 @@ class Home extends React.Component<HomeProps>
 	reinstallMods = () => 
 	{
 		let pack = _.cloneDeep(this.state.pack);
-		const installJobs = pack.mods.map((mod: Mod, i: number) => {
+		const installJobs = pack.mods.map((mod: ModData, i: number) => {
 			// check not required, install all!
 			//if (moment(value.newestTimestamp).isAfter(value.installedTimestamp))
 
@@ -943,7 +929,7 @@ class Home extends React.Component<HomeProps>
 		let pack = _.cloneDeep(this.state.pack);
 
 		// create install and delete jobs:
-		const jobs = pack.mods.map((mod: Mod, i) => {
+		const jobs = pack.mods.map((mod: ModData, i) => {
 			const isOutdated = (mod.installedTimestamp === "" || mod.installedTimestamp === null || moment(mod.newestTimestamp).isAfter(mod.installedTimestamp));
 
 			if (isOutdated)
@@ -1141,6 +1127,7 @@ class Home extends React.Component<HomeProps>
 	uploadPack = () => {
 		this.showMessageBox('Waiting...', 'Ok');
 		const server = this.getCurrentServer();
+		console.log('Server', server);
 		if (!server) {
 			console.log('no server selected');
 			return;
@@ -1167,16 +1154,15 @@ class Home extends React.Component<HomeProps>
 		})
 	}
 
-	onInstallClick = (index: number) => 
-	{
+	installMod = (mod: any, selected?: any) => {
+		const index = this.getModIndex(mod.id);
+
+		if (selected === undefined)
+			selected = mod.latestFile;
+
 		let pack = _.cloneDeep(this.state.pack);
-
-		index = this.sortedToReal(index);
-		const mod = this.state.pack.mods[index];
-		console.log(mod);
-
-		const lastSlash = mod.latestFile.download_url.lastIndexOf('/');
-		const fileName = mod.latestFile.download_url.substring(lastSlash + 1, mod.latestFile.download_url.length);
+		const lastSlash = selected.download_url.lastIndexOf('/');
+		const fileName = selected.download_url.substring(lastSlash + 1, selected.download_url.length);
 
 		// mack modpack definition backup
 		const safeDate = (new Date()).toISOString().replaceAll(':','_');		
@@ -1186,11 +1172,12 @@ class Home extends React.Component<HomeProps>
 		
 		const oldName = _.clone(pack.mods[index].installedName);
 		pack.mods[index].installedName = fileName;
-		pack.mods[index].installedTimestamp = mod.latestFile.timestamp;
+		pack.mods[index].installedTimestamp = selected.timestamp;
 		const toDelete = pathTools.join(this.state.packInfo.directory, "client", "mods", oldName);
 		if (oldName.length > 0 && fs.existsSync(toDelete))
 			fs.unlinkSync(toDelete);
-		this.installSingle(mod.latestFile.download_url, fileName);
+		this.installSingle(selected.download_url, fileName);
+		console.log('Installed:', fileName);
 		
 		(async () => {
 			this.setState({
@@ -1202,38 +1189,97 @@ class Home extends React.Component<HomeProps>
 		})();
 	}
 
-	manualInstall = () => 
+	onInstallClick = (index: number) => 
 	{
-		this.showMessageBox('Mod ID: ', 'Input', {
-			ok: (id) => {
-				curseforge.getMod(id).then((mod: any) => {
-					console.log(mod);
-					let str = '';
-					mod.latestFiles.map((file: any, index: number) => {
-						str += index + ": ";
-						str += file.minecraft_versions.reduce((lhs: string, rhs: string) => {
-							return lhs + ':' + rhs;
-						});
-						str += ' - ';
-						str += file.timestamp;
-						str += ' - ';
-						str += file.download_url.substring(file.download_url.lastIndexOf('/') + 1);
-						str += '\n';
-					})
-					this.showMessageBox('Pick One (invalid input is ignored):\n' + str, 'Input', {
-						ok: (num: number) => {
-							if (mod.latestFiles[num]) {
-								const selected = mod.latestFiles[num];
-								console.log(mod);
-								this.addModToPack(mod, selected);
-							}
-						}
-					})
+		index = this.sortedToReal(index);
+		const mod = _.cloneDeep(this.state.pack.mods[index]);
+		console.log(mod);
+		if (mod.error)
+		{
+			console.log('error, installing manual', mod.id);
+			return this.manualInstall(mod.id, true);
+		}
+		this.installMod(mod);
+	}
+
+	getStrictCompatibleModFiles = (modId: number) => {
+		const loader = this.state.pack.fabric ? "Fabric" : "Forge";
+
+		return curseforge.getModFiles(modId).then((files: any) => {
+			const compatibleFiles = files.filter((elem: any) => {
+				return elem.minecraft_versions.includes(loader) && elem.minecraft_versions.includes(this.state.pack.minecraftVersion);
+			});
+			const sorted = compatibleFiles.sort((lhs: any, rhs: any) => {
+				return new Date(lhs.timestamp) > new Date(rhs.timestamp);
+			})
+			return sorted;
+		});
+	}
+
+	onInstallSpecificClick = (index: number) => 
+	{
+		index = this.sortedToReal(index);
+		const mod = this.state.pack.mods[index];
+
+		this.getStrictCompatibleModFiles(mod.id);
+	}
+
+	manualInstall = (id?: number, autoInstall?: boolean) => 
+	{
+		const manual = (id: number) => {
+			this.curse.getMod(id).then((mod: CurseMod) => {
+				const modData = mod.data();
+				let str = '';
+				const addToList = (file: any, index: number, offset?: number) => {
+					if (!offset)
+						offset = 0;
+					const offsetted = index + offset;
+					str += offsetted + ": ";
+					str += file.minecraft_versions.reduce((lhs: string, rhs: string) => {
+						return lhs + ':' + rhs;
+					});
+					str += ' - ';
+					str += file.timestamp;
+					str += ' - ';
+					str += file.download_url.substring(file.download_url.lastIndexOf('/') + 1);
+					str += '\n--------------------\n';
+				}
+				modData.latestFiles.map((file: any, index: number) => {
+					addToList(file, index, 0);
 				});
-				console.log(id)
-			},
-			cancel: () => {}
-		})
+				const compat = mod.getCompatibleFiles([this.state.pack.minecraftVersion], true);
+				compat.length = Math.min(compat.length, 20);
+				compat.map((file: any, index: number) => {
+					addToList(file, index, modData.latestFiles.length);
+				});
+				this.showMessageBox('Pick One (invalid input is ignored):\n' + str, 'Input', {
+					ok: (num: number) => {
+						let selected: any;
+						if (num >= modData.latestFiles.length && compat[num - modData.latestFiles.length]) {
+							selected = compat[num - modData.latestFiles.length];
+						}
+						else if (modData.latestFiles[num]) {
+							selected = modData.latestFiles[num];
+						}
+						this.addModToPack(modData, selected, autoInstall).then(() => {
+							if (autoInstall)
+								this.installMod(modData, selected);
+						});
+					}
+				})
+			})
+		};
+
+		if (!id) {
+			this.showMessageBox('ModData ID: ', 'Input', {
+				ok: (id: number) => {
+					manual(id);
+				},
+				cancel: () => {}
+			})
+		} else {
+			manual(id);
+		}
 	}
 
 	render()
@@ -1348,7 +1394,6 @@ class Home extends React.Component<HomeProps>
 								onChange={(event) => {
 									let pack = _.clone(this.state.pack);
 									pack.fabric = event.target?.value === "Fabric";
-									console.log(pack.fabric);
 									this.setState({
 										pack: pack
 									}, () => {
@@ -1385,6 +1430,13 @@ class Home extends React.Component<HomeProps>
 								})}
 							</StyledSelect>
 						</StyledForm>
+						<FormGroup>
+							<FormControlLabel control={<Switch defaultChecked onChange={(event) => {
+								this.setState({permissiveModMatch: !event.target.checked}, () => {
+									this.savePersistence();
+								});
+							}} />} label="Strict Version Check" />
+						</FormGroup>
 					</ThemeProvider>
 				</div>
 				<div className={styles.modTableArea}>
@@ -1433,7 +1485,7 @@ class Home extends React.Component<HomeProps>
 								(Re)Install Mods
 							</StyledButton>
 							<StyledButton
-								onClick={this.manualInstall}
+								onClick={() => {this.manualInstall(undefined, true)}}
 								disabled={this.state.initialLoading}
 							>
 								Manual Install
@@ -1470,10 +1522,11 @@ class Home extends React.Component<HomeProps>
 								},
 								{
 									Header: 'Name',
-									accessor: (mod: Mod) => {
+									accessor: (mod: ModData) => {
 										return {
 											name: mod.name,
-											error: mod.error
+											error: mod.error,
+											manualInstall: mod.manualInstall
 										};
 									},
 									id: 'name',
@@ -1481,10 +1534,11 @@ class Home extends React.Component<HomeProps>
 								},
 								{
 									Header: 'Installed',
-									accessor: (mod: Mod) => {
+									accessor: (mod: ModData) => {
 										return {
 											installed: mod.installedTimestamp,
-											newest: mod.newestTimestamp
+											newest: mod.newestTimestamp,
+											manualInstall: mod.manualInstall
 										};
 									},
 									id: 'installed_time',
@@ -1492,10 +1546,11 @@ class Home extends React.Component<HomeProps>
 								},
 								{
 									Header: 'Newest',
-									accessor: (mod: Mod) => {
+									accessor: (mod: ModData) => {
 										return {
 											installed: mod.installedTimestamp,
-											newest: mod.newestTimestamp
+											newest: mod.newestTimestamp,
+											manualInstall: mod.manualInstall
 										};
 									},
 									id: 'newest_time',
@@ -1503,7 +1558,7 @@ class Home extends React.Component<HomeProps>
 								},
 								{
 									Header: 'Installed File',
-									accessor: (mod: Mod) => {
+									accessor: (mod: ModData) => {
 										let installed = mod.installedName;
 										if (installed === undefined || installed === "" || installed === null)
 											return "not installed";
@@ -1514,7 +1569,7 @@ class Home extends React.Component<HomeProps>
 								},
 								{
 									Header: 'Version',
-									accessor: (mod: Mod) => {
+									accessor: (mod: ModData) => {
 										if (!mod.latestFile)
 											return 'ERROR!';
 										return JSON.stringify(mod.latestFile.minecraft_versions);
@@ -1527,6 +1582,7 @@ class Home extends React.Component<HomeProps>
 							addLine={() => {}}
 							data={this.getModList()}
 							onInstallClick={(index) => {this.onInstallClick(index)}}
+							onInstallSpecificClick={(index) => {this.onInstallSpecificClick(index)}}
 						>
 						</ModTable>
 					</div>

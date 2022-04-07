@@ -1,5 +1,5 @@
-#include "update_client.hpp"
 #include "config.hpp"
+#include "update_client.hpp"
 #include "base_path.hpp"
 
 #include <ftxui/dom/elements.hpp>

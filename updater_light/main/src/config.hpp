@@ -1,5 +1,6 @@
 #pragma once
 
+#undef isfinite
 #include <nlohmann/json.hpp>
 
 #include <set>

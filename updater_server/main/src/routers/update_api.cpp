@@ -29,6 +29,7 @@ void UpdateApi::addHttpEndpoints(attender::http_server& server)
         req->read_body(*content).then(
             [content{content}, res, this]() {
                 try {
+                    std::cout << "Diff body read\n";
                     if (content->empty())
                     {
                         return res->status(400).type(".txt").send("Expecting an object like: {\"mods\": [{\"name\": \"asdf\", \"hash\": \"asdasd\"}]}");
@@ -42,6 +43,7 @@ void UpdateApi::addHttpEndpoints(attender::http_server& server)
                             .sha256 = mod["hash"].get<std::string>()
                         });
                     }
+                    std::cout << "Building difference\n";
                     auto diff = agent_.buildDifference(files);
                     auto response = "{}"_json; 
                     response["download"] = diff.download;

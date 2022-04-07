@@ -69,13 +69,13 @@ a:hover {
 	position: absolute;
 	z-index: 100;
 	border: 1px solid #ccc;
-	background: var(--background-color);
+	background: var(--background-color) !important;
 }
 
 .flexible-modal-mask {
 	position: fixed;
 	height: 100%;
-	background: rgba(35, 35, 35, 0.8);
+	background: rgba(35, 35, 35, 0.8) !important;
 	top: 0;
 	left: 0;
 	right: 0;
@@ -93,12 +93,12 @@ a:hover {
 }
 
 .flexible-modal-drag-area {
-	background: rgba(0, 0, 0, 0.4);
-	height: 30px;
-	position: absolute;
-	right: 0;
-	top: 0;
-	cursor: move;
+	background: rgba(0, 0, 0, 0.4) !important;
+	height: 30px !important;
+	position: absolute !important;
+	right: 0 !important;
+	top: 0 !important;
+	cursor: move !important;
 }
 
 .flexible-modal-drag-area-right {
