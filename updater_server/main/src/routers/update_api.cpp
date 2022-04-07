@@ -60,7 +60,11 @@ void UpdateApi::addHttpEndpoints(attender::http_server& server)
                     res->status(400).type(".txt").send(exc.what());
                 }
             }
-        );
+        ).except([content{content}, res](auto){
+            std::cout << "Error while reading body.\n";
+            std::cout << "Read: " << *content << "\n";
+            std::cout << "(" << content->size() << ") bytes\n";
+        });
     });
     
     server.get("/download_mod/:fileName", [this](auto req, auto res) {

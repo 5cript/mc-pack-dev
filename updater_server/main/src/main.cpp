@@ -24,9 +24,9 @@ int main(int argc, char** argv)
     Minecraft minecraft{};
     UpdateApi updateApi{server, std::filesystem::path{argv[0]}.parent_path(), &minecraft};
 
-    //minecraft.start();
-    //minecraft.forwardIo();
-    //minecraft.stop();
+    minecraft.start();
+    minecraft.forwardIo();
+    minecraft.stop();
 
     std::cin.get();
 }

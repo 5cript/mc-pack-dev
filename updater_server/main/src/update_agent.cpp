@@ -24,7 +24,8 @@ std::filesystem::path getBasePath(std::filesystem::path const& selfDirectory)
     return selfDirectory;
 #else
     //return selfDirectory.parent_path().parent_path().parent_path() / "dummy_dir" / "server";
-    return "/home/tim/MinecraftServers/Fabric1_17";
+    //return "/home/tim/MinecraftServers/Fabric1_17";
+    return selfDirectory;
 #endif
 }
 
