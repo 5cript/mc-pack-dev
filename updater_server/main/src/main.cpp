@@ -16,7 +16,7 @@ int main(int argc, char** argv)
     std::cout << "Running on: " << port << "\n";
 
     // create a server
-    http_server server(context.get_io_service(), [](auto*, auto const&, auto const&){});
+    http_server server(context.get_io_context(), [](auto*, auto const&, auto const&){});
 
     // start server on port 80. Numbers are also valid
     server.start(std::to_string(port), "::");
@@ -24,7 +24,9 @@ int main(int argc, char** argv)
     Minecraft minecraft{};
     UpdateApi updateApi{server, std::filesystem::path{argv[0]}.parent_path(), &minecraft};
 
-    minecraft.start();
-    minecraft.forwardIo();
-    minecraft.stop();
+    //minecraft.start();
+    //minecraft.forwardIo();
+    //minecraft.stop();
+
+    std::cin.get();
 }
