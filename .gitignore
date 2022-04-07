@@ -65,3 +65,4 @@ updater_server/build_release
 updater_light/build
 updater_light/attendee
 updater_light/FTXUI
+build_release
