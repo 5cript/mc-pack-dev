@@ -1,0 +1,23 @@
+.messageBoxHeader {
+	height: 30px;
+	font-size: 28px;
+	font-weight: 600;
+	padding-left: 10px;
+	padding-top: 3px;
+	text-align: center;
+}
+
+.messageBoxButtons
+{
+	padding-left: 7px;
+}
+
+.messageBoxText {
+	width: calc(100% - 20px);
+	background: var(--background-color);
+	color: var(--foreground-color);
+	padding-left: 10px;
+	border: none;
+	overflow: hidden;
+	resize: none;
+}
