@@ -20,21 +20,14 @@ const isCorrectVersion = (file: any, mcVersions: Array<string>, fabric: boolean,
         return false;
     }) !== undefined;
 
-    const correctVersion = file.gameVersion.find((version : string) => {
-        for (let v in mcVersions)
-        {
-            if (!mcVersions[v].includes('.'))
-                continue;
-            if (mcVersions[v] === version)
-                return true;
-        }
+    const correctVersion = file.gameVersion.find((version: string) => {
         for (let v in mcVersions)
         {
             if (!mcVersions[v].includes('.'))
                 continue;
             if (permissive && simplifyVersion(mcVersions[v]) === simplifyVersion(version))
                 return true;
-            else if (mcVersions[v] === version)
+            if (mcVersions[v] === version)
                 return true;
         }
         return false;
@@ -59,8 +52,8 @@ class CurseMod
         const filtered = this.files.filter((element: any) => {
             return isCorrectVersion(element, withVersions, this.isFabricMod,  permissive);
         });
-        return filtered.sort((lhs: {timestamp: string}, rhs: {timestamp: string}) => {
-            return moment(rhs.timestamp).isAfter(lhs.timestamp) ? 1 : -1;
+        return filtered.sort((lhs: {fileDate: string}, rhs: {fileDate: string}) => {
+            return moment(rhs.fileDate).isAfter(lhs.fileDate) ? 1 : -1;
         });
     }
 

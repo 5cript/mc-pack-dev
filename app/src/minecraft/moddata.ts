@@ -2,7 +2,7 @@ type ModData = {
     name: string;
     id: number;
     sid: string;
-    gameVersion: Array<string>;
+    minecraftVersions: Array<string>;
     installedName: string;
     logoPng64: string;
     installedTimestamp: string;

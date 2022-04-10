@@ -208,13 +208,13 @@ class Home extends React.Component<HomeProps>
 				latestFile: {
 					id: 0,
 					gameVersions: ['?'],
-					file_name: '?',
-					file_size: 0,
-					timestamp: '?',
+					fileName: '?',
+					fileSize: 0,
+					fileDate: '?',
 					release_type: '?',
-					download_url: '?',
+					downloadUrl: '?',
 					downloads: null,
-					mod_dependencies: [],
+					dependencies: [],
 					alternate: false,
 					alternate_id: 0,
 					available: false
@@ -230,7 +230,7 @@ class Home extends React.Component<HomeProps>
 				if (modFiles.length === 0) {
 					return makeErrorMod(mod.id, mod);
 				}
-				mod.newestTimestamp = modFiles[0].timestamp;
+				mod.newestTimestamp = modFiles[0].fileDate;
 				mod.latestFile = modFiles[0];
 				return mod;
 			});
@@ -640,23 +640,26 @@ class Home extends React.Component<HomeProps>
 		const pack = _.clone(this.state.pack);
 
 		let imageData = "";
-		if (this.converterCanvas)
-		{
-			this.converterCanvas.height = 32;
-			this.converterCanvas.width = 32;
-			let ctx : (CanvasRenderingContext2D | null) = this.converterCanvas.getContext('2d');
-			if (ctx)
-			{
-				var img = new Image;
-				if (modFromApi.logo)
-					img.src = modFromApi.logo.thumbnailUrl;
-				ctx.drawImage(img, 0, 0, this.converterCanvas.width, this.converterCanvas.height);
-			}
-			imageData = this.converterCanvas.toDataURL();
-		}
+		// TODO: bring back
+		// if (this.converterCanvas)
+		// {
+		// 	this.converterCanvas.height = 32;
+		// 	this.converterCanvas.width = 32;
+		// 	let ctx : (CanvasRenderingContext2D | null) = this.converterCanvas.getContext('2d');
+		// 	if (ctx)
+		// 	{
+		// 		var img = new Image;
+		// 		if (modFromApi.logo)
+		// 			img.src = modFromApi.logo.thumbnailUrl;
+		// 		ctx.drawImage(img, 0, 0, this.converterCanvas.width, this.converterCanvas.height);
+		// 	}
+		// 	imageData = this.converterCanvas.toDataURL();
+		// }
 
 		if (latest === undefined) {
-			const modFiles = (await this.curse.getMod(modFromApi.id)).getCompatibleFiles([this.state.pack.minecraftVersion], this.state.permissiveModMatch);
+			const mod = (await this.curse.getMod(modFromApi.id));
+			console.log(mod);
+			const modFiles = mod.getCompatibleFiles([this.state.pack.minecraftVersion], this.state.permissiveModMatch);
 			if (modFiles.length === 0) {
 				this.showMessageBox('No file found for given Minecraft version.', 'Ok');
 				return;
@@ -667,12 +670,12 @@ class Home extends React.Component<HomeProps>
 			name: modFromApi.name,
 			id: modFromApi.id,
 			sid: modFromApi.key,
-			minecraftVersions: lastest.gameVersion,
+			minecraftVersions: latest.gameVersion,
 			installedName: '',
 			installedTimestamp: '',
-			newestTimestamp: latest.timestamp,
+			newestTimestamp: latest.fileDate,
 			logoPng64: imageData,
-			latestFile:latest,
+			latestFile: latest,
 			error: false,
 			manualInstall: undefined
 		};
@@ -754,7 +757,6 @@ class Home extends React.Component<HomeProps>
 
 	getModList = () => 
 	{
-		console.log(this.state.pack);
 		const res = this.state.pack.mods.sort((lhs: ModData, rhs: ModData) => {
 			return lhs.name.localeCompare(rhs.name);
 		});
@@ -826,7 +828,9 @@ class Home extends React.Component<HomeProps>
 	{
 		const result = pathTools.join(this.state.packInfo.directory, 'client', 'mods', fileName);
 		console.log('Installing to:', result);
-		return fetch(downloadUrl).then(response => {
+		return fetch(downloadUrl, {
+			mode: 'no-cors',
+		}).then(response => {
 			return response.arrayBuffer().then(buffer => {
 				return fsPromise.writeFile(result, Buffer.from(buffer))
 			})
@@ -841,11 +845,11 @@ class Home extends React.Component<HomeProps>
 			//if (moment(value.newestTimestamp).isAfter(value.installedTimestamp))
 
 			console.log(mod.latestFile);
-			const lastSlash = mod.latestFile.download_url.lastIndexOf('/');
-			const fileName = mod.latestFile.download_url.substring(lastSlash + 1, mod.latestFile.download_url.length);
+			const lastSlash = mod.latestFile.downloadUrl.lastIndexOf('/');
+			const fileName = mod.latestFile.downloadUrl.substring(lastSlash + 1, mod.latestFile.downloadUrl.length);
 			pack.mods[i].installedName = fileName;
-			pack.mods[i].installedTimestamp = mod.latestFile.timestamp;
-			return async () => {return this.installSingle(mod.latestFile.download_url, fileName)};
+			pack.mods[i].installedTimestamp = mod.latestFile.fileDate;
+			return async () => {return this.installSingle(mod.latestFile.downloadUrl, fileName)};
 		});
 
 		const modsFolder = pathTools.join(this.state.packInfo.directory, 'client', 'mods');
@@ -903,7 +907,7 @@ class Home extends React.Component<HomeProps>
 
 	getMinecraftVersions = async () => 
 	{
-		return fetch("https://addons-ecs.forgesvc.net/api/v2/minecraft/version", {}).then(response => {
+		return fetch("https://addons-ecs.forgesvc.net/api/v2/minecraft/version").then(response => {
 			return response.json().then(json => {
 				return json;
 			})
@@ -956,15 +960,15 @@ class Home extends React.Component<HomeProps>
 
 			if (isOutdated)
 			{
-				const lastSlash = mod.latestFile.download_url.lastIndexOf('/');
-				const fileName = mod.latestFile.download_url.substring(lastSlash + 1, mod.latestFile.download_url.length);
+				const lastSlash = mod.latestFile.downloadUrl.lastIndexOf('/');
+				const fileName = mod.latestFile.downloadUrl.substring(lastSlash + 1, mod.latestFile.downloadUrl.length);
 				const oldName = _.clone(pack.mods[i].installedName);
 				pack.mods[i].installedName = fileName;
-				pack.mods[i].installedTimestamp = mod.latestFile.timestamp;
+				pack.mods[i].installedTimestamp = mod.latestFile.fileDate;
 				return async () => {
 					if (oldName.length > 0)
 						fs.unlinkSync(pathTools.join(this.state.packInfo.directory, "client", "mods", oldName));
-					return this.installSingle(mod.latestFile.download_url, fileName);
+					return this.installSingle(mod.latestFile.downloadUrl, fileName);
 				};
 			}
 
@@ -1184,8 +1188,8 @@ class Home extends React.Component<HomeProps>
 			selected = mod.latestFile;
 
 		let pack = _.cloneDeep(this.state.pack);
-		const lastSlash = selected.download_url.lastIndexOf('/');
-		const fileName = selected.download_url.substring(lastSlash + 1, selected.download_url.length);
+		const lastSlash = selected.downloadUrl.lastIndexOf('/');
+		const fileName = selected.downloadUrl.substring(lastSlash + 1, selected.downloadUrl.length);
 
 		// mack modpack definition backup
 		const safeDate = (new Date()).toISOString().replaceAll(':','_');		
@@ -1195,11 +1199,11 @@ class Home extends React.Component<HomeProps>
 		
 		const oldName = _.clone(pack.mods[index].installedName);
 		pack.mods[index].installedName = fileName;
-		pack.mods[index].installedTimestamp = selected.timestamp;
+		pack.mods[index].installedTimestamp = selected.fileDate;
 		const toDelete = pathTools.join(this.state.packInfo.directory, "client", "mods", oldName);
 		if (oldName.length > 0 && fs.existsSync(toDelete))
 			fs.unlinkSync(toDelete);
-		this.installSingle(selected.download_url, fileName);
+		this.installSingle(selected.downloadUrl, fileName);
 		console.log('Installed:', fileName);
 		
 		(async () => {
@@ -1225,26 +1229,12 @@ class Home extends React.Component<HomeProps>
 		this.installMod(mod);
 	}
 
-	getStrictCompatibleModFiles = (modId: number) => {
-		const loader = this.state.pack.fabric ? "Fabric" : "Forge";
-
-		return curseforge.getModFiles(modId).then((files: any) => {
-			const compatibleFiles = files.filter((elem: any) => {
-				return elem.minecraft_versions.includes(loader) && elem.minecraft_versions.includes(this.state.pack.minecraftVersion);
-			});
-			const sorted = compatibleFiles.sort((lhs: any, rhs: any) => {
-				return new Date(lhs.timestamp) > new Date(rhs.timestamp);
-			})
-			return sorted;
-		});
-	}
-
 	onInstallSpecificClick = (index: number) => 
 	{
 		index = this.sortedToReal(index);
 		const mod = this.state.pack.mods[index];
 
-		this.getStrictCompatibleModFiles(mod.id);
+		this.manualInstall(mod.id, true);
 	}
 
 	manualInstall = (id?: number, autoInstall?: boolean) => 
@@ -1258,19 +1248,21 @@ class Home extends React.Component<HomeProps>
 						offset = 0;
 					const offsetted = index + offset;
 					str += offsetted + ": ";
-					str += file.minecraft_versions.reduce((lhs: string, rhs: string) => {
+					str += file.gameVersion.reduce((lhs: string, rhs: string) => {
 						return lhs + ':' + rhs;
 					});
 					str += ' - ';
-					str += file.timestamp;
+					str += file.fileDate;
 					str += ' - ';
-					str += file.download_url.substring(file.download_url.lastIndexOf('/') + 1);
+					str += file.downloadUrl.substring(file.downloadUrl.lastIndexOf('/') + 1);
 					str += '\n--------------------\n';
 				}
 				modData.latestFiles.map((file: any, index: number) => {
 					addToList(file, index, 0);
 				});
-				const compat = mod.getCompatibleFiles([this.state.pack.minecraftVersion], true);
+				console.log(mod.files);
+				const compat = mod.getCompatibleFiles([this.state.pack.minecraftVersion], this.state.permissiveModMatch);
+				console.log(compat);
 				compat.length = Math.min(compat.length, 20);
 				compat.map((file: any, index: number) => {
 					addToList(file, index, modData.latestFiles.length);
@@ -1307,8 +1299,6 @@ class Home extends React.Component<HomeProps>
 
 	render()
 	{
-		console.log(this.state.initialLoading);
-
 		return (
 			<div className={styles.container} data-tid="container">
 				<Modal 
@@ -1556,7 +1546,7 @@ class Home extends React.Component<HomeProps>
 									accessor: (mod: ModData) => {
 										return {
 											installed: mod.installedTimestamp,
-											newest: mod.latestFile.fileDate,
+											newest: mod.newestTimestamp,
 											manualInstall: mod.manualInstall
 										};
 									},
@@ -1568,7 +1558,7 @@ class Home extends React.Component<HomeProps>
 									accessor: (mod: ModData) => {
 										return {
 											installed: mod.installedTimestamp,
-											newest: mod.latestFile.fileDate,
+											newest: mod.newestTimestamp,
 											manualInstall: mod.manualInstall
 										};
 									},
@@ -1591,7 +1581,7 @@ class Home extends React.Component<HomeProps>
 									accessor: (mod: ModData) => {
 										if (!mod.latestFile)
 											return 'ERROR!';
-										return JSON.stringify(mod.latestFile.minecraft_versions);
+										return JSON.stringify(mod.latestFile.gameVersion);
 									},
 									id: 'version'
 								}

@@ -15,6 +15,8 @@ import log from 'electron-log';
 import MenuBuilder from './menu';
 import fs from 'fs';
 import { resolveHtmlPath } from './util';
+import http from 'http';
+const fsPromise = fs.promises;
 
 export default class AppUpdater {
   constructor() {
@@ -142,3 +144,34 @@ app
     });
   })
   .catch(console.log);
+
+ipcMain.on('upload', (event: any, {addr, port, file}) => {
+  fsPromise.readFile(file).then(data => {
+    const req = http.request(
+      {
+        host: addr,
+        port: port,
+        path: "/upload_mods",
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-tar',
+          'Content-Length': data.length,
+        }
+      },
+      response => {
+        event.reply('upload-response', {
+          success: response.statusCode === 200 || response.statusCode === 204
+        });
+      }
+    )
+    req.on('error', (err) => {
+      console.error(err);
+      event.reply('upload-response', {
+        success: false,
+        error: err
+      });
+    });
+    req.write(data);
+    req.end();
+  })
+})
