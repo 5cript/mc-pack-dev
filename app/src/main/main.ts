@@ -13,6 +13,7 @@ import { app, BrowserWindow, shell, ipcMain } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import log from 'electron-log';
 import MenuBuilder from './menu';
+import fs from 'fs';
 import { resolveHtmlPath } from './util';
 
 export default class AppUpdater {
@@ -30,6 +31,10 @@ ipcMain.on('ipc-example', async (event, arg) => {
   console.log(msgTemplate(arg));
   event.reply('ipc-example', msgTemplate('pong'));
 });
+
+ipcMain.handle('get-user-data-path', async (event) => {
+  return app.getPath('userData');
+})
 
 if (process.env.NODE_ENV === 'production') {
   const sourceMapSupport = require('source-map-support');
@@ -79,7 +84,7 @@ const createWindow = async () => {
       //   ? path.join(__dirname, 'preload.js')
       //   : path.join(__dirname, '../../.erb/dll/preload.js'),
       nodeIntegration: true,
-      contextIsolation: false,
+      contextIsolation: false
     },
   });
 

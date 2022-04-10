@@ -1,4 +1,4 @@
-import curseforge from 'mc-curseforge-api';
+import * as curseforge from './cursforgeapi/curseforge';
 import ModData from './moddata';
 import moment from 'moment';
 
@@ -14,13 +14,13 @@ const simplifyVersion = (version: string) =>
 }
 
 const isCorrectVersion = (file: any, mcVersions: Array<string>, fabric: boolean, permissive: boolean) => {
-    const isFabric = file.minecraft_versions.find((version : string) => {
+    const isFabric = file.gameVersion.find((version : string) => {
         if (version.toLowerCase() === "fabric")
             return true;
         return false;
     }) !== undefined;
 
-    const correctVersion = file.minecraft_versions.find((version : string) => {
+    const correctVersion = file.gameVersion.find((version : string) => {
         for (let v in mcVersions)
         {
             if (!mcVersions[v].includes('.'))
@@ -81,8 +81,8 @@ class CurseApi
         this.isFabric = isFabric;
     }
 
-    getMod = (id: number): Promise<CurseMod> =>  {
-        return Promise.all([curseforge.getMod(id), curseforge.getModFiles(id)]).then(([modData, files]) => {
+    getMod = (id: number, name?: string): Promise<CurseMod> =>  {
+        return Promise.all([curseforge.getMod(id, name), curseforge.getModFiles(id, name)]).then(([modData, files]) => {
             return new CurseMod(modData, files, this.isFabric);
         });
     }

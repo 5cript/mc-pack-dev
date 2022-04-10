@@ -1,7 +1,7 @@
 import React from 'react';
 //import { Link } from 'react-router-dom';
 //import routes from '../constants/routes.json';
-import styles from './Home.css';
+import styles from './Home.module.css';
 import Autosuggest from 'react-autosuggest';
 import MessageBox from './MessageBox';
 import _ from 'lodash';
@@ -199,34 +199,53 @@ class Home extends React.Component<HomeProps>
 
 	updateModList = async (mods: Array<ModData>, versions: Array<string>) =>
 	{
+		const makeErrorMod = (info: any, base?: ModData) => {
+			let mod: ModData = {
+				id: info.id,
+				name: '_Broken_' + info.id + '_' + info.name,
+				...base,
+				newestTimestamp: '?',
+				latestFile: {
+					id: 0,
+					gameVersions: ['?'],
+					file_name: '?',
+					file_size: 0,
+					timestamp: '?',
+					release_type: '?',
+					download_url: '?',
+					downloads: null,
+					mod_dependencies: [],
+					alternate: false,
+					alternate_id: 0,
+					available: false
+				},
+				error: true
+			};
+			return mod;
+		}
+
 		const promises = mods.map((mod : ModData) => {
-			return this.curse.getMod(mod.id).then((freshMod: CurseMod) => {
+			return this.curse.getMod(mod.id, mod.name).then((freshMod: CurseMod) => {
 				const modFiles = freshMod.getCompatibleFiles(versions, this.state.permissiveModMatch);
 				if (modFiles.length === 0) {
-					mod.newestTimestamp = '?';
-					mod.latestFile = {
-						id: 0,
-						minecraft_versions: ['?'],
-						file_name: '?',
-						file_size: 0,
-						timestamp: '?',
-						release_type: '?',
-						download_url: '?',
-						downloads: null,
-						mod_dependencies: [],
-						alternate: false,
-						alternate_id: 0,
-						available: false
-					};
-					mod.error = true;
-					return mod;
+					return makeErrorMod(mod.id, mod);
 				}
 				mod.newestTimestamp = modFiles[0].timestamp;
 				mod.latestFile = modFiles[0];
 				return mod;
 			});
 		});
-		return Promise.all(promises);
+		return Promise.allSettled(promises).then((results) => {
+			return results.map(result => {
+				if (result.status === 'fulfilled') {
+					return result.value;
+				}
+				else {
+					console.log('Error with mod', result.reason);
+					return makeErrorMod(result.reason);
+				}
+			})
+		});
 	}
 
 	openPack = async (dir: string) => 
@@ -326,43 +345,47 @@ class Home extends React.Component<HomeProps>
 
 	loadPersistence = () =>
 	{
-		const dataDir = pathTools.dirname(electron.remote.app.getPath('userData'));
-		const persistence = pathTools.join(dataDir, "McPackDev", "persistence.json");
-		try
-		{
-			const contentStr = fs.readFileSync(persistence, {encoding: 'utf-8'});
-			const content = JSON.parse(contentStr);
-			this.servers = content.servers ? content.servers : [];
-			if (this.mounted)
-				this.setState({selectedServer: content.selectedServer, permissiveModMatch: content.permissiveModMatch})
-			else {
-				this.state.selectedServer = content.selectedServer;
-				this.state.permissiveModMatch = content.permissiveModMatch;
+		electron.ipcRenderer.invoke('get-user-data-path').then((result) => {
+			const dataDir = pathTools.dirname(result);
+			const persistence = pathTools.join(dataDir, "McPackDev", "persistence.json");
+			try
+			{
+				const contentStr = fs.readFileSync(persistence, {encoding: 'utf-8'});
+				const content = JSON.parse(contentStr);
+				this.servers = content.servers ? content.servers : [];
+				if (this.mounted)
+					this.setState({selectedServer: content.selectedServer, permissiveModMatch: content.permissiveModMatch})
+				else {
+					this.state.selectedServer = content.selectedServer;
+					this.state.permissiveModMatch = content.permissiveModMatch;
+				}
+	
+				this.openPack(content.lastOpened);
 			}
-
-			this.openPack(content.lastOpened);
-		}
-		catch(e)
-		{
-			console.log(e);
-		}
+			catch(e)
+			{
+				console.log(e);
+			}
+		})
 	}
 
 	savePersistence = () => 
 	{
-		const dataDir = pathTools.dirname(electron.remote.app.getPath('userData'));
-		const packDevDir = pathTools.join(dataDir, "McPackDev");
-		const persistence = pathTools.join(packDevDir, "persistence.json");
+		electron.ipcRenderer.invoke('get-user-data-path').then((result) => {
+			const dataDir = pathTools.dirname(result);
+			const packDevDir = pathTools.join(dataDir, "McPackDev");
+			const persistence = pathTools.join(packDevDir, "persistence.json");
 
-		if (!fs.existsSync(packDevDir))
-			fs.mkdirSync(packDevDir);
+			if (!fs.existsSync(packDevDir))
+				fs.mkdirSync(packDevDir);
 
-		fs.writeFileSync(persistence, JSON.stringify({
-			lastOpened: this.state.packInfo.directory,
-			servers: this.servers,
-			selectedServer: this.state.selectedServer,
-			permissiveModMatch: this.state.permissiveModMatch
-		}, null, 2))
+			fs.writeFileSync(persistence, JSON.stringify({
+				lastOpened: this.state.packInfo.directory,
+				servers: this.servers,
+				selectedServer: this.state.selectedServer,
+				permissiveModMatch: this.state.permissiveModMatch
+			}, null, 2))
+		});
 	}
 
 	showMessageBox = (message : string, type : string, actions: MessageBoxActions = {}) => 
@@ -607,8 +630,6 @@ class Home extends React.Component<HomeProps>
 	}
 
 	addModToPack = async (modFromApi: any, latest: any, ignoreDuplicate?: boolean) => {
-		console.log(modFromApi);
-
 		if (ignoreDuplicate === undefined || ignoreDuplicate === null)
 			ignoreDuplicate = false;
 
@@ -646,7 +667,7 @@ class Home extends React.Component<HomeProps>
 			name: modFromApi.name,
 			id: modFromApi.id,
 			sid: modFromApi.key,
-			minecraftVersions: latest.minecraft_versions,
+			minecraftVersions: lastest.gameVersion,
 			installedName: '',
 			installedTimestamp: '',
 			newestTimestamp: latest.timestamp,
@@ -1286,26 +1307,22 @@ class Home extends React.Component<HomeProps>
 
 	render()
 	{
+		console.log(this.state.initialLoading);
+
 		return (
 			<div className={styles.container} data-tid="container">
-				<ReactModal initWidth={500} initHeight={200} 
-					onFocus={() => {}}
+				<Modal 
 					className={styles.messageBoxModal}
 					onRequestClose={()=>{}} 
+					ariaHideApp={false}
 					isOpen={this.state.initialLoading}
-					disableResize={true}
-					disableMove={true}
-					top={200}
-					left={300}
-					disableVerticalMove={true}
-					disableHorizontalMove={true}
 				>
 					<div style={{
 						paddingTop: "30px",
 						paddingLeft: "8px",
 						fontSize: "18px"
 					}}>Loading</div>
-				</ReactModal>
+				</Modal>
 
 				<MessageBox
 					visible={this.state.messageBoxVisible}
@@ -1539,7 +1556,7 @@ class Home extends React.Component<HomeProps>
 									accessor: (mod: ModData) => {
 										return {
 											installed: mod.installedTimestamp,
-											newest: mod.newestTimestamp,
+											newest: mod.latestFile.fileDate,
 											manualInstall: mod.manualInstall
 										};
 									},
@@ -1551,7 +1568,7 @@ class Home extends React.Component<HomeProps>
 									accessor: (mod: ModData) => {
 										return {
 											installed: mod.installedTimestamp,
-											newest: mod.newestTimestamp,
+											newest: mod.latestFile.fileDate,
 											manualInstall: mod.manualInstall
 										};
 									},

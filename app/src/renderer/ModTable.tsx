@@ -6,7 +6,7 @@ import { useTable, useBlockLayout } from 'react-table';
 import classNames from 'classnames';
 import moment from 'moment';
 
-import styles from './ModTable.css';
+import styles from './ModTable.module.css';
 
 const TableCell = ({
     value: initialValue,

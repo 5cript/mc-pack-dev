@@ -7,7 +7,7 @@ import Modal from 'react-modal'
 import TextareaAutosize from 'react-textarea-autosize';
 
 // Styles
-import styles from './MessageBox.css';
+import styles from './MessageBox.module.css';
 
 /**
  * Props:
@@ -18,9 +18,6 @@ import styles from './MessageBox.css';
  */
 class MessageBox extends React.Component
 {
-    boxStyle : string;
-    inputValue: string;
-
     state = {
         rodalVisible: false,
         rodalMessage: ''
@@ -51,7 +48,7 @@ class MessageBox extends React.Component
         this.props.onButtonPress(whatButton, this.inputValue);
     }
 
-    updateInputValue = (val: string) =>
+    updateInputValue = (val) =>
     {
         this.inputValue = val.target.value;
     }
@@ -68,6 +65,7 @@ class MessageBox extends React.Component
                 onFocus={() => {}}
                 className={styles.messageBoxModal}
                 onRequestClose={()=>{this.onRodalClose()}} 
+                ariaHideApp={false}
                 isOpen={this.props.visible}
                 // disableResize={this.props.disableResize}
                 // disableMove={this.props.disableMove}
